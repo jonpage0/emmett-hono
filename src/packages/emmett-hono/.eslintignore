@@ -1,0 +1,2 @@
+# Ignore configuration files for typed linting
+.eslintrc.cjs 

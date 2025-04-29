@@ -1,7 +1,7 @@
+/// <reference lib="webworker" />
 import type { Context } from 'hono';
-import type { StatusCode } from 'hono/utils/http-status';
+import type { ContentfulStatusCode, StatusCode } from 'hono/utils/http-status';
 import { ProblemDocument } from './types';
-import type { Response } from 'express';
 
 /**
  * General options for HTTP responses.
@@ -42,57 +42,20 @@ export type HttpProblemResponseOptions = {
   eTag?: string;
 };
 
-/**
- * Low-level send function to construct a Response with given status and options.
- * This function handles different body types (Response, object, string, null) and sets headers like ETag/Location.
- */
-export function send(
-  c: Context,
-  statusCode: StatusCode,
-  options?: HttpResponseOptions,
-): Response {
-  const { body, location, eTag } = options ?? {};
-  const headers: Record<string, string> = {};
-  if (location) headers['Location'] = location;
-  if (eTag) headers['ETag'] = eTag;
+// Helper types for Legacy options to match old signatures where necessary
+// (e.g., Problem Details used to be just a string)
+type LegacyHttpProblemResponseOptions =
+  | string // Just the problem detail string
+  | HttpProblemResponseOptions; // Or the full options object
 
-  // If body is provided, determine how to send it
-  if (body !== undefined && body !== null) {
-    if (body instanceof Response) {
-      // If body is already a Response object, merge status and headers
-      const respHeaders = new Headers(body.headers);
-      Object.entries(headers).forEach(([key, value]) =>
-        respHeaders.set(key, value),
-      );
-      // Use original body and new status/headers
-      return new Response(body.body, {
-        status: statusCode,
-        headers: respHeaders,
-      });
-    }
-    if (typeof body === 'object') {
-      // For object bodies, return JSON response (if status code allows a body)
-      if (statusCode !== 204 && statusCode !== 304) {
-        return c.json(body, statusCode, headers);
-      } else {
-        // If no content allowed but object provided, stringify anyway (unusual case)
-        return new Response(JSON.stringify(body), {
-          status: statusCode,
-          headers: { ...headers, 'Content-Type': 'application/json' },
-        });
-      }
-    }
-    // For string or other primitive types:
-    if (statusCode !== 204 && statusCode !== 304) {
-      return c.text(String(body), statusCode, headers);
-    } else {
-      // 204/304 should not have a body. Return with headers only.
-      return new Response(null, { status: statusCode, headers });
-    }
-  } else {
-    // No body provided (e.g., 204 No Content)
-    return new Response(null, { status: statusCode, headers });
+// Helper function to normalize legacy problem options
+function normalizeLegacyProblemOptions(
+  options?: LegacyHttpProblemResponseOptions,
+): HttpProblemResponseOptions {
+  if (typeof options === 'string') {
+    return { problemDetails: options };
   }
+  return options ?? {};
 }
 
 /**
@@ -107,41 +70,25 @@ export function sendCreated(
   // Determine body content for Created: if createdId is present, respond with { id: createdId }
   const bodyContent =
     'createdId' in options ? { id: options.createdId } : undefined;
-  let resp: Response;
-  if (bodyContent !== undefined) {
-    resp = c.json(bodyContent, 201);
-  } else {
-    resp = new Response(null, { status: 201 });
-  }
+
+  const response = bodyContent ? c.json(bodyContent, 201) : c.body(null, 201);
+
   // Set Location header:
   if ('url' in options && options.url) {
-    resp.headers.set('Location', options.url);
+    response.headers.set('Location', options.url);
   } else if ('createdId' in options && options.createdId) {
     // If URL not explicitly given, derive from request URL and createdId
     const baseUrl = c.req.url;
     const separator = baseUrl.endsWith('/') ? '' : '/';
-    resp.headers.set('Location', baseUrl + separator + options.createdId);
+    response.headers.set('Location', baseUrl + separator + options.createdId);
   }
-  return resp;
-}
 
-/** Sends a 202 Accepted response, using the general send function. */
-export function sendAccepted(
-  c: Context,
-  options: AcceptedHttpResponseOptions,
-): Response {
-  return send(c, 202, options);
-}
+  // Set ETag if provided
+  if (options.eTag) {
+    response.headers.set('ETag', options.eTag);
+  }
 
-/** Sends a 204 No Content response. */
-export function sendNoContent(
-  c: Context,
-  options?: NoContentHttpResponseOptions,
-): Response {
-  const headers: Record<string, string> = {};
-  if (options?.eTag) headers['ETag'] = options.eTag;
-  if (options?.location) headers['Location'] = options.location;
-  return new Response(null, { status: 204, headers });
+  return response;
 }
 
 /**
@@ -167,12 +114,133 @@ export function sendProblem(
   if (eTag) headers['ETag'] = eTag;
   // Ensure status code is appropriate for content
   if (statusCode !== 204 && statusCode !== 304) {
-    return c.json(problemDoc, statusCode as StatusCode, headers);
+    // Cast statusCode to ContentfulStatusCode to satisfy c.json
+    return c.json(problemDoc, statusCode as ContentfulStatusCode, headers);
   } else {
-    // If a 204/304 with a problem (rare), just send JSON manually
+    // If a 204/304 with a problem (rare), just send JSON manually using Response
+    // Ensure we use the global Response constructor
     return new Response(JSON.stringify(problemDoc), {
       status: statusCode,
       headers,
     });
   }
 }
+
+//////////////////////////////////////
+// Simple Response Helpers (using Hono context methods)
+//////////////////////////////////////
+
+/** Sends a 200 OK response with optional JSON body and ETag. */
+export function sendOK(c: Context, options?: HttpResponseOptions): Response {
+  const response = options?.body
+    ? c.json(options.body, 200)
+    : c.body(null, 200);
+  if (options?.eTag) response.headers.set('ETag', options.eTag);
+  if (options?.location) response.headers.set('Location', options.location);
+  return response;
+}
+
+/** Sends a 202 Accepted response with a required Location header. */
+export function sendAccepted(
+  c: Context,
+  options: AcceptedHttpResponseOptions,
+): Response {
+  const response = options.body ? c.json(options.body, 202) : c.body(null, 202);
+  response.headers.set('Location', options.location);
+  if (options.eTag) response.headers.set('ETag', options.eTag);
+  return response;
+}
+
+/** Sends a 204 No Content response with optional ETag and Location. */
+export function sendNoContent(
+  c: Context,
+  options?: NoContentHttpResponseOptions,
+): Response {
+  const response = c.body(null, 204);
+  if (options?.eTag) response.headers.set('ETag', options.eTag);
+  if (options?.location) response.headers.set('Location', options.location);
+  return response;
+}
+
+/** Sends a 400 Bad Request Problem Details response. */
+export function sendBadRequest(
+  c: Context,
+  options?: HttpProblemResponseOptions,
+): Response {
+  return sendProblem(c, 400, options);
+}
+
+/** Sends a 403 Forbidden Problem Details response. */
+export function sendForbidden(
+  c: Context,
+  options?: HttpProblemResponseOptions,
+): Response {
+  return sendProblem(c, 403, options);
+}
+
+/** Sends a 404 Not Found Problem Details response. */
+export function sendNotFound(
+  c: Context,
+  options?: HttpProblemResponseOptions,
+): Response {
+  return sendProblem(c, 404, options);
+}
+
+/** Sends a 409 Conflict Problem Details response. */
+export function sendConflict(
+  c: Context,
+  options?: HttpProblemResponseOptions,
+): Response {
+  return sendProblem(c, 409, options);
+}
+
+/** Sends a 412 Precondition Failed Problem Details response. */
+export function sendPreconditionFailed(
+  c: Context,
+  options?: HttpProblemResponseOptions,
+): Response {
+  return sendProblem(c, 412, options);
+}
+
+//////////////////////////////////////
+// Legacy Compatibility Shim (DEPRECATED - Use direct `send*` functions)
+//////////////////////////////////////
+
+/**
+ * @deprecated Use direct `send*` functions (e.g., `sendOK`, `sendCreated`) instead.
+ * Provides compatibility with the older Express-style response helpers.
+ */
+export const Legacy = {
+  /** @deprecated Use `sendOK` */
+  OK: (options?: HttpResponseOptions) => (c: Context) => sendOK(c, options),
+  /** @deprecated Use `sendCreated` */
+  Created: (options: CreatedHttpResponseOptions) => (c: Context) =>
+    sendCreated(c, options),
+  /** @deprecated Use `sendAccepted` */
+  Accepted: (options: AcceptedHttpResponseOptions) => (c: Context) =>
+    sendAccepted(c, options),
+  /** @deprecated Use `sendNoContent` */
+  NoContent: (options?: NoContentHttpResponseOptions) => (c: Context) =>
+    sendNoContent(c, options),
+  /** @deprecated Use `sendBadRequest` or `sendProblem` */
+  BadRequest: (options?: LegacyHttpProblemResponseOptions) => (c: Context) =>
+    sendBadRequest(c, normalizeLegacyProblemOptions(options)),
+  /** @deprecated Use `sendForbidden` or `sendProblem` */
+  Forbidden: (options?: LegacyHttpProblemResponseOptions) => (c: Context) =>
+    sendForbidden(c, normalizeLegacyProblemOptions(options)),
+  /** @deprecated Use `sendNotFound` or `sendProblem` */
+  NotFound: (options?: LegacyHttpProblemResponseOptions) => (c: Context) =>
+    sendNotFound(c, normalizeLegacyProblemOptions(options)),
+  /** @deprecated Use `sendConflict` or `sendProblem` */
+  Conflict: (options?: LegacyHttpProblemResponseOptions) => (c: Context) =>
+    sendConflict(c, normalizeLegacyProblemOptions(options)),
+  /** @deprecated Use `sendPreconditionFailed` or `sendProblem` */
+  PreconditionFailed:
+    (options?: LegacyHttpProblemResponseOptions) => (c: Context) =>
+      sendPreconditionFailed(c, normalizeLegacyProblemOptions(options)),
+  /** @deprecated Use `sendProblem` */
+  HttpProblem:
+    (statusCode: StatusCode, options?: LegacyHttpProblemResponseOptions) =>
+    (c: Context) =>
+      sendProblem(c, statusCode, normalizeLegacyProblemOptions(options)),
+};

@@ -1,4 +1,10 @@
-import type { Context } from 'hono';
+/// <reference lib="webworker" />
+import { type Brand } from '@event-driven-io/emmett';
+import type { Context, HonoRequest } from 'hono';
+import { cors } from 'hono/cors';
+
+// Define CorsOptions using Parameters utility type
+export type CorsOptions = Parameters<typeof cors>[0];
 
 /**
  * Options for configuring the Emmett-Hono application.
@@ -9,15 +15,13 @@ export interface ApplicationOptions {
   /** Enable built-in CORS middleware (defaults to false). */
   enableCors?: boolean;
   /** Options for CORS middleware (uses Hono's CORS). */
-  corsOptions?: import('hono/cors').CorsOptions;
+  corsOptions?: CorsOptions;
   /** Enable ETag middleware for response caching (defaults to false). */
   enableETag?: boolean;
-  /** Options for ETag generation (e.g., weak or strong). */
+  /** Options for ETag generation (uses Hono's etag middleware options). */
   etagOptions?: { weak?: boolean };
   /** Enable request logging middleware (defaults to false). */
   enableLogger?: boolean;
-  /** Options for logger middleware (e.g., custom logger function). */
-  loggerOptions?: LoggerOptions;
   /**
    * Optional error-to-ProblemDetails mapping function.
    * If provided, errors will be converted to RFC 7807 Problem responses via this mapping.
@@ -72,7 +76,7 @@ function defaultTitleForStatus(status: number): string {
 export type ErrorToProblemDetailsMapping = (
   error: unknown,
   c: Context,
-) => ProblemDocument | undefined;
+) => ProblemDocument | undefined | void;
 
 /** Default error mapping: converts any error to an HTTP 500 ProblemDocument with its message. */
 export const defaultErrorMapper: ErrorToProblemDetailsMapping = (
@@ -88,34 +92,60 @@ export const defaultErrorMapper: ErrorToProblemDetailsMapping = (
   });
 };
 
-/**
- * Describes a valid ETag string (quoted string, possibly with W/ prefix for weak).
- */
-export type ETag = string;
+//////////////////////////////////////
+// ETAG Types and Helpers (Moved from middlewares/etag.ts)
+//////////////////////////////////////
+
+export const HeaderNames = {
+  IF_MATCH: 'if-match',
+  ETag: 'etag',
+} as const;
+
+export type WeakETag = Brand<`W/"${string}"`, 'ETag'>;
+export type ETag = Brand<string, 'ETag'>;
+
+const WeakETagRegex = /^W\/"(.*)"$/;
+
+const WRONG_WEAK_ETAG_FORMAT = 'WRONG_WEAK_ETAG_FORMAT';
 
 /**
- * Options for logging middleware.
+ * Type guard to check if an ETag string is in the weak format (W/"...").
+ * @internal
  */
-export interface LoggerOptions {
-  /** Function to log the message (defaults to console.log). */
-  logger?: (str: string) => void;
-  /**
-   * How to handle timing:
-   * - 'all': log all requests and their durations.
-   * - 'none': do not log requests.
-   * (You could extend this to 'error-only' etc. as needed.)
-   */
-  timing?: 'all' | 'none';
-  /**
-   * Function to format log info into a string. Receives an object with method, url, status, time.
-   */
-  format?: (info: LogInfo) => string;
-}
+export const isWeakETag = (
+  etag: ETag | string | undefined,
+): etag is WeakETag => {
+  return typeof etag === 'string' && WeakETagRegex.test(etag);
+};
 
-/** Information passed to the logger format function. */
-export interface LogInfo {
-  method: string;
-  url: string;
-  status: number;
-  time: number; // in milliseconds
-}
+/**
+ * Extracts the raw value from a weak ETag string.
+ * Throws an error if the format is incorrect.
+ * @param etag A string validated to be a WeakETag.
+ * @internal
+ */
+export const getWeakETagValue = (etag: WeakETag): string => {
+  const result = WeakETagRegex.exec(etag as string);
+  if (result === null || result.length < 2) {
+    throw new Error(WRONG_WEAK_ETAG_FORMAT);
+  }
+  return result[1]!;
+};
+
+/**
+ * Formats a value into a weak ETag string.
+ * @internal
+ */
+export const toWeakETag = (value: number | bigint | string): WeakETag => {
+  return `W/"${value}"` as WeakETag;
+};
+
+/**
+ * Gets the ETag value from the If-Match header of a Hono request.
+ * Returns undefined if the header is missing.
+ * @internal
+ */
+export const getETagFromIfMatch = (request: HonoRequest): ETag | undefined => {
+  const etag = request.header(HeaderNames.IF_MATCH);
+  return etag ? (etag as ETag) : undefined;
+};
