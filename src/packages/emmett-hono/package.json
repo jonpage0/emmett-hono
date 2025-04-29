@@ -25,6 +25,7 @@
   "scripts": {
     "build": "tsup",
     "build:types": "tsc -p tsconfig.build.json",
+    "build:watch": "tsup --watch",
     "clean": "rimraf dist",
     "dev": "wrangler dev src/worker.ts --local",
     "preview": "wrangler pages dev ./dist",
@@ -47,6 +48,7 @@
     "@cloudflare/vitest-pool-workers": "^0.8.0",
     "@hono/zod-validator": "^0.5.0",
     "@types/node": "^20.17.32",
+    "@vitest/coverage-v8": "^3.1.2",
     "@vitest/ui": "^3.0.0",
     "commander": "^12.1.0",
     "eslint": "^9.0.0",
@@ -56,6 +58,7 @@
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",
     "vitest": "^3.0.0",
+    "vitest-environment-miniflare": "^2.14.4",
     "wrangler": "^3.9.0"
   },
   "peerDependencies": {

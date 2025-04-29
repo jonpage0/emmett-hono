@@ -1,53 +1,47 @@
-````md
 # @event-driven-io/emmett-hono
 
-_Event-sourced HTTP helpers for **Hono** on **Cloudflare Workers** (and any
-Fetch-API runtime)._
+_Event‑sourced HTTP helpers for \***\*Hono\*\*** on \***\*Cloudflare Workers\*\*** (and any Fetch‑API runtime)._
 
 `emmett-hono` gives you:
 
-- A single **`getApplication()`** factory to bootstrap a Hono app with
-  _Problem Details_, CORS, ETag, logging, etc.
-- Thin, explicit **`sendCreated()` / `sendProblem()`** utilities that layer
-  nicely on top of native Hono response helpers.
-- A **`Legacy` compatibility shim** that mimics the classic
-  `OK() | Created() | BadRequest()` helpers from
-  `@event-driven-io/emmett-expressjs`, so large code-bases can migrate
-  incrementally.
+- A single **`getApplication()`** factory to bootstrap a Hono app with CORS, ETag, structured logging and RFC‑7807 _Problem Details_.
+- Thin, explicit **`sendCreated()`\*\*** / \***\*`sendProblem()`** utilities that layer cleanly on top of Hono’s native `c.json()/c.text()` helpers.
+- A **`Legacy`\*\*** compatibility shim\*\* that mimics the classic `OK() | Created() | BadRequest()` helpers from `@event-driven-io/emmett-expressjs`, so large code‑bases can migrate incrementally.
 
-> **TL;DR** Use Hono's `c.json()/c.text()` for normal responses,
-> `sendCreated()` for **201**, and `sendProblem()` for RFC-7807 errors.  
-> Older code can temporarily call `Legacy.Created()` etc. while you refactor.
+> **TL;DR** Use Hono’s `c.json()` / `c.text()` for ordinary responses,\
+> `sendCreated()` for **201 Created**, and `sendProblem()` for RFC‑7807 error payloads.\
+> Old code can temporarily call `Legacy.Created()` etc. while you refactor.
+>
+> ⚠️ The **Legacy** helpers will be **removed in v1.0 (planned Q3 2025)** — add the ESLint rule below to keep new code clean.
 
 ---
 
-## Table of contents
+## Table of contents
 
 1. [Installation](#installation)
-2. [Quick start](#quick-start)
+2. [Quick start](#quick-start)
 3. [Modern response helpers](#modern-response-helpers)
-4. [Legacy helpers (deprecated)](#legacy-helpers-deprecated)
+4. [Legacy helpers (deprecated)](#legacy-helpers-deprecated)
 5. [Migrating from Express](#migrating-from-express)
-6. [Cloudflare Workers deploy](#cloudflare-workers-deploy)
-7. [Testing with Vitest](#testing-with-vitest)
+6. [Cloudflare Workers deploy](#cloudflare-workers-deploy)
+7. [Testing with Vitest](#testing-with-vitest)
 8. [API reference](#api-reference)
 9. [Changelog](#changelog)
 10. [License](#license)
 
 ---
 
-## Installation <a id="installation"></a>
+## Installation&#x20;
 
 ```bash
 pnpm add @event-driven-io/emmett-hono hono zod @hono/zod-validator
 ```
 
-> `hono` and `zod` are peer dependencies so that you stay on whichever versions
-> your app already uses.
+`hono` and `zod` are **peer dependencies** so you stay on whatever versions your app already uses.
 
 ---
 
-## Quick start <a id="quick-start"></a>
+## Quick start&#x20;
 
 ```ts
 import { Hono } from 'hono';
@@ -94,27 +88,26 @@ export const app = getApplication({
   enableLogger: true,
 });
 
-export type AppType = typeof app; // <- handy for hono client generation
+export type AppType = typeof app; // ← handy for hono client generation
 
-export default app; // Cloudflare Workers entry-point
+export default app; // Cloudflare Workers entry‑point
 ```
 
 ---
 
-## Modern response helpers <a id="modern-response-helpers"></a>
+## Modern response helpers&#x20;
 
-| use-case            | call                                                          |
-| ------------------- | ------------------------------------------------------------- |
-| **200 / 2xx** JSON  | `return c.json(data)` or `c.text('ok')`                       |
-| **201 Created**     | `return sendCreated(c, { createdId: '123' })`                 |
-| RFC-7807 **errors** | `return sendProblem(c, 400, { problemDetails: 'Bad input' })` |
+| use‑case           | Call                                                          |
+| ------------------ | ------------------------------------------------------------- |
+| **200 / 2xx** JSON | `return c.json(data)`   or  `c.text('ok')`                    |
+| **201 Created**    | `return sendCreated(c, { createdId: '123' })`                 |
+| RFC‑7807 errors    | `return sendProblem(c, 400, { problemDetails: 'Bad input' })` |
 
-Under the hood they just create a standard `Response`, so nothing magical is
-hidden from you.
+Under the hood these just construct a standard `Response` — no magic, no global mutable state.
 
 ---
 
-## Legacy helpers (deprecated) <a id="legacy-helpers-deprecated"></a>
+## Legacy helpers (deprecated)&#x20;
 
 If you still have code like this:
 
@@ -127,10 +120,11 @@ app.post('/users', () => {
 });
 ```
 
-…it will keep working, but:
+…it will keep working, but remember:
 
-- They live in the namespaced export `Legacy.*` so you must opt-in explicitly.
-- They are marked **`@deprecated`** in types and will be **removed in v1.0**.
+- They live in the namespaced export `Legacy.*` so you must **opt‑in** explicitly.
+- They carry **`@deprecated`** in the type‑hints.
+- They will vanish in **v1.0 (Q3 2025)**.
 
 | Legacy helper             | Modern equivalent                 |
 | ------------------------- | --------------------------------- |
@@ -141,10 +135,16 @@ app.post('/users', () => {
 
 ---
 
-## Migrating from Express <a id="migrating-from-express"></a>
+## Migrating from Express&#x20;
 
-1. Replace `@event-driven-io/emmett-expressjs` with `@event-driven-io/emmett-hono`.
-2. Change your route files:
+1. **Replace the package**
+
+   ```bash
+   pnpm remove @event-driven-io/emmett-expressjs
+   pnpm add @event-driven-io/emmett-hono
+   ```
+
+2. **Swap the router**
 
    ```diff
    - import { Router } from 'express';
@@ -153,16 +153,48 @@ app.post('/users', () => {
    + const router = new Hono();
    ```
 
-3. Swap `req, res` for `c.req` / `c.*` helpers.
-4. Convert `on(async (req) => …)` to a plain async `(c) => …` handler.
-5. Gradually replace `Legacy.*` helpers with `sendCreated`, `sendProblem`, or
-   direct `c.json()` calls.
+3. **Replace \*\***`req`\***\*/\*\***`res`\*\* with `c.req` and `c.json()` / `c.text()`.
+
+4. **Change \*\***`on(handler)`\*\* wrappers to plain async `(c) => …`.
+
+5. **Wrap old helpers** in `Legacy.*(opts)(c)` until you have time to refactor.
+
+```bash
+# ⚠️  Test on a feature branch first!
+# Adds Legacy shim + `(c)` suffix in a very naïve way
+rg -lE '\b(OK|Created|Accepted|NoContent|BadRequest|Forbidden|NotFound|Conflict|PreconditionFailed|HttpProblem)\('\ \
+   src | xargs sed -i '' -E 's/\b(OK|Created|Accepted|NoContent|BadRequest|Forbidden|NotFound|Conflict|PreconditionFailed|HttpProblem)\(/Legacy.\1(/g'
+# Then visit each diff by hand – context‑aware editors are still better than regex 🤘
+```
+
+Add an ESLint guard so no new files import `Legacy`:
+
+```js
+// .eslintrc.cjs
+module.exports = {
+  rules: {
+    'no-restricted-imports': [
+      'error',
+      {
+        paths: [
+          {
+            name: '@event-driven-io/emmett-hono',
+            importNames: ['Legacy'],
+            message:
+              'The Legacy shim is deprecated. Use sendCreated / sendProblem or direct Hono helpers instead.',
+          },
+        ],
+      },
+    ],
+  },
+};
+```
 
 ---
 
-## Cloudflare Workers deploy <a id="cloudflare-workers-deploy"></a>
+## Cloudflare Workers deploy&#x20;
 
-A minimal `wrangler.toml` is included:
+`wrangler.toml` example:
 
 ```toml
 name               = "emmett-hono-dev"
@@ -174,9 +206,27 @@ compatibility_date = "2025-04-29"
 pnpm build && wrangler deploy
 ```
 
+### Production observability
+
+Cloudflare logs are easiest to query when they’re JSON. The default logger prints a simple string; switch to:
+
+```ts
+app.use(
+  '*',
+  logger({
+    transport: ({ method, path, status, elapsed }) =>
+      console.log(
+        JSON.stringify({ t: Date.now(), method, path, status, ms: elapsed }),
+      ),
+  }),
+);
+```
+
+…and Log Push / Workers Analytics will parse the fields automatically.
+
 ---
 
-## Testing with Vitest <a id="testing-with-vitest"></a>
+## Testing with Vitest&#x20;
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -190,240 +240,30 @@ describe('GET /ping', () => {
 });
 ```
 
-You can also run `vitest --pool=cf-workers` via
-`@cloudflare/vitest-pool-workers` for tighter runtime fidelity.
+If you need full Worker APIs (e.g., `crypto.subtle`) run Vitest with the Cloudflare pool:
+
+```bash
+vitest --pool=cf-workers
+```
 
 ---
 
-## API reference <a id="api-reference"></a>
+## API reference&#x20;
 
 ```ts
-// application ---------------------------------------------------------------
+// application -----------------------------------------------------------
 getApplication(options: ApplicationOptions): Hono
 
-// utilities -----------------------------------------------------------------
+// utilities -------------------------------------------------------------
 sendCreated(c, opts)
 sendProblem(c, status, opts)
+getETagFromIfMatch(req) → string | undefined
 
-// legacy shim ---------------------------------------------------------------
-import { Legacy } from 'emmett-hono';
+// legacy shim -----------------------------------------------------------
+import { Legacy } from '@event-driven-io/emmett-hono';
 Legacy.Created(...), Legacy.BadRequest(...), ...
 ```
 
-Full type docs are generated in `dist/index.d.ts`.
+Complete type definitions are generated in **`dist/index.d.ts`**.
 
-## Usage
-
-1.  **Install the package:**
-
-    ```bash
-    pnpm install @event-driven-io/emmett-hono
-    ```
-
-2.  **Create a Hono app instance using `getApplication`:**
-
-    ```typescript
-    // src/app.ts
-    import { Hono } from 'hono';
-    import { getApplication } from '@event-driven-io/emmett-hono';
-
-    // Define your API routes (example)
-    function registerMyApi(app: Hono) {
-      app.get('/hello', (c) => c.text('Hello Emmett Hono!'));
-    }
-
-    // Configure and create the app
-    const app = getApplication({
-      apis: [registerMyApi],
-      enableCors: true,
-      enableETag: true,
-      enableLogger: true,
-      // Optional: map specific errors to problem details
-      // mapError: (error, c) => { ... }
-    });
-
-    export default app;
-    ```
-
-3.  **Use built-in response helpers for standard HTTP responses:**
-
-    ```typescript
-    import {
-      sendOK,
-      sendCreated,
-      sendNoContent,
-      sendProblem,
-      sendNotFound,
-      // ... other helpers
-    } from '@event-driven-io/emmett-hono';
-    import type { Context } from 'hono';
-
-    // Example: POST endpoint creating a resource
-    async function handleCreateResource(c: Context) {
-      const id = crypto.randomUUID();
-      // ... logic to create resource ...
-
-      return sendCreated(c, { createdId: id });
-    }
-
-    // Example: GET endpoint fetching a resource
-    async function handleGetResource(c: Context) {
-      const id = c.req.param('id');
-      const resource = await getResourceById(id); // Your data fetching logic
-
-      if (!resource) {
-        return sendNotFound(c, {
-          problemDetails: `Resource with id ${id} not found.`,
-        });
-      }
-
-      return sendOK(c, { body: resource });
-    }
-
-    // Example: Handling an error with Problem Details
-    async function handleSomethingThatMightFail(c: Context) {
-      try {
-        // ... risky operation ...
-        return sendNoContent(c);
-      } catch (error) {
-        // Log the internal error
-        console.error(error);
-        // Send a generic 500 Problem Details response
-        return sendProblem(c, 500, {
-          problemDetails: 'An unexpected error occurred.',
-        });
-      }
-    }
-    ```
-
-4.  **Integrate ETag checks for conditional requests:**
-
-    ```typescript
-    import {
-      getETagFromIfMatch,
-      isWeakETag,
-      getWeakETagValue,
-      toWeakETag,
-      sendPreconditionFailed,
-      sendOK,
-      sendNoContent,
-    } from '@event-driven-io/emmett-hono';
-    import type { Context } from 'hono';
-
-    async function handleUpdateResource(c: Context) {
-      const expectedETag = getETagFromIfMatch(c.req);
-      const currentVersion = await getCurrentResourceVersion(c.req.param('id')); // Fetch current version
-
-      // Basic ETag check (assuming weak ETags with version numbers)
-      if (
-        !expectedETag ||
-        !isWeakETag(expectedETag) ||
-        getWeakETagValue(expectedETag) !== String(currentVersion)
-      ) {
-        return sendPreconditionFailed(c, { problemDetails: 'ETag mismatch' });
-      }
-
-      // ... perform update logic ...
-      const nextVersion = currentVersion + 1;
-
-      // Return 204 No Content with the new ETag
-      return sendNoContent(c, { eTag: toWeakETag(nextVersion) });
-    }
-    ```
-
-## Legacy Helpers (Deprecated)
-
-For compatibility during migration from `@event-driven-io/emmett-expressjs`, a `Legacy` namespace is provided. **Avoid using these in new code.**
-
-```typescript
-import { Legacy } from '@event-driven-io/emmett-hono';
-import type { Context } from 'hono';
-
-// Old style:
-app.post('/users', (c: Context) => Legacy.Created({ createdId: 'u-42' })(c));
-
-// New style (preferred):
-import { sendCreated } from '@event-driven-io/emmett-hono';
-app.post('/users', (c: Context) => sendCreated(c, { createdId: 'u-42' }));
-```
-
-## Migration from `@event-driven-io/emmett-expressjs`
-
-Follow this two-phase plan to migrate:
-
-1.  **Install the Hono package:**
-
-    ```bash
-    pnpm add @event-driven-io/emmett-hono@latest # Or specific version
-    ```
-
-2.  **Introduce the `Legacy` compat layer:**
-
-    - Replace Express helper imports:
-      ```diff
-      - import { Created, BadRequest } from '@event-driven-io/emmett-expressjs';
-      + import { Legacy } from '@event-driven-io/emmett-hono';
-      ```
-    - Wrap each call with `Legacy` and add the curried `(c)`:
-
-      ```diff
-      - return Created({ createdId });
-      + return Legacy.Created({ createdId })(c);
-
-      // If using `on(handler)` style, it might look like:
-      - on(async (command, metadata) => Created(...))
-      + on(async (command, metadata) => (c: Context) => Legacy.Created(...)(c))
-      ```
-
-    - Use find/replace tools if needed (adjust regex for your specific helpers):
-      ```bash
-      # Example using ripgrep and sed
-      rg -lE '\b(OK|Created|Accepted|NoContent|BadRequest|Forbidden|NotFound|Conflict|PreconditionFailed|HttpProblem)\(' \
-         src | xargs sed -i 's/\b\(OK\|Created\|Accepted\|NoContent\|BadRequest\|Forbidden\|NotFound\|Conflict\|PreconditionFailed\|HttpProblem\)(\(.*\))/Legacy.\1(\2)(c)/g'
-      # NOTE: This regex might need refinement, especially around handlers already using `(c) => ...`. Manual checks are advised.
-      ```
-    - Run tests to verify the shim works.
-
-3.  **Adopt new utilities gradually:**
-
-    - In _new_ code, use direct Hono methods (`c.text`, `c.json`) or the new `send*` helpers (`sendCreated`, `sendProblem`, etc.).
-    - **Optional:** Add an ESLint rule to prevent new imports of `Legacy`:
-      ```jsonc
-      // .eslintrc.cjs
-      module.exports = {
-        rules: {
-          "no-restricted-imports": [
-            "error",
-            {
-              paths: [
-                {
-                  name: "@event-driven-io/emmett-hono",
-                  importNames: ["Legacy"],
-                  message:
-                    "The Legacy shim is deprecated. Use direct Hono helpers (e.g., sendCreated, sendProblem) or c.json/c.text in new code.",
-                },
-              ],
-            },
-          ],
-        },
-      };
-      ```
-
-4.  **Refactor existing files opportunistically:**
-    - When modifying a file, replace `Legacy.Helper(options)(c)` with `sendHelper(c, options)`.
-    - Replace `Legacy.ProblemHelper(details)(c)` with `sendProblem(c, statusCode, { problemDetails: details })`.
-    - Remove the `Legacy` import once the file is clean.
-    - Continue until `Legacy` is no longer used.
-
-## Contributing
-
-Contributions are welcome! Please follow standard fork-and-pull-request workflows.
-
-## License
-
-(Specify your license here - e.g., MIT)
-
-```
-
-```
-````
+---

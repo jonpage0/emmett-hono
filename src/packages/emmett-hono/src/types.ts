@@ -133,11 +133,16 @@ export const getWeakETagValue = (etag: WeakETag): string => {
 };
 
 /**
- * Formats a value into a weak ETag string.
+ * Formats a value into an ETag string (weak by default).
+ * @param value The value to format (e.g., version number).
+ * @param strong If true, format as a strong ETag (e.g., "value"); defaults to false (weak ETag W/"value").
  * @internal
  */
-export const toWeakETag = (value: number | bigint | string): WeakETag => {
-  return `W/"${value}"` as WeakETag;
+export const toWeakETag = (
+  value: number | bigint | string,
+  strong?: boolean,
+): ETag | WeakETag => {
+  return strong ? (`"${value}"` as ETag) : (`W/"${value}"` as WeakETag);
 };
 
 /**

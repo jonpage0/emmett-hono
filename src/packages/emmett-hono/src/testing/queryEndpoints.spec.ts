@@ -101,13 +101,34 @@ describe('V. Query Endpoints (Read Models)', () => {
   });
 
   it('List Resources → 200 with array and list‑level ETag', async () => {
-    await createTodo(app, 'A');
-    await createTodo(app, 'B');
+    const [idA] = await createTodo(app, 'A');
+    const [idB] = await createTodo(app, 'B');
 
     const res = await app.request('/todos');
     expect(res.status).toBe(200);
-    const body = (await res.json()) as Array<Record<string, unknown>>;
+    const body = (await res.json()) as Array<{
+      id: string;
+      title: string;
+      done: boolean;
+      version: number;
+    }>;
     expect(body.length).toBe(2);
+    expect(body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: idA,
+          title: 'A',
+          done: false,
+          version: 1,
+        }),
+        expect.objectContaining({
+          id: idB,
+          title: 'B',
+          done: false,
+          version: 1,
+        }),
+      ]),
+    );
     expect(res.headers.get('ETag')).toMatch(/^W\//);
   });
 

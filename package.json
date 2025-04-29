@@ -1,5 +1,6 @@
 {
 	"devDependencies": {
+		"miniflare": "^4.20250428.0",
 		"tsx": "^4.19.3"
 	}
 }

@@ -69,7 +69,8 @@ describe('IV. Middleware & Application Configuration', () => {
 
   describe('Logger middleware', () => {
     it('emits a log line (console.info) – smoke test', async () => {
-      const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      // Hono logger seems to use console.log, not console.info
+      const spy = vi.spyOn(console, 'log').mockImplementation(() => {}); // Changed back to spy on console.log
       const app = buildApp({ enableLogger: true });
       await app.request('/ping');
       expect(spy).toHaveBeenCalled();
