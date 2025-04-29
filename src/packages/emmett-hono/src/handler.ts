@@ -1,163 +1,178 @@
-import type { Context, Handler } from 'hono';
+import type { Context } from 'hono';
+import type { Handler } from 'hono';
 import type { StatusCode } from 'hono/utils/http-status';
 import {
   send,
-  sendAccepted,
   sendCreated,
+  sendAccepted,
   sendNoContent,
   sendProblem,
-  type AcceptedHttpResponseOptions,
-  type CreatedHttpResponseOptions,
-  type HttpProblemResponseOptions,
-  type HttpResponseOptions,
-  type NoContentHttpResponseOptions,
-} from './responses'; // Import our response sending logic
+} from './responses';
+import type {
+  HttpResponseOptions,
+  CreatedHttpResponseOptions,
+  AcceptedHttpResponseOptions,
+  NoContentHttpResponseOptions,
+  HttpProblemResponseOptions,
+} from './responses';
 
-/**
- * Defines the expected return type for handlers wrapped by `on`.
- * It must be a Response object or a Promise resolving to one.
- */
+/** The return type for an Emmett-Hono handler function: a Response or a Promise of Response. */
 export type EmmettHonoResponse = Response | Promise<Response>;
 
-/**
- * Defines the function signature for an Emmett-Hono handler.
- * It receives the Hono Context and should return an EmmettHonoResponse.
- */
+/** Signature of a handler function using Emmett-Hono utilities, receiving a Hono Context. */
 export type EmmettHonoHandler = (c: Context) => EmmettHonoResponse;
 
 /**
- * Wraps an EmmettHonoHandler to be compatible with Hono's Handler type.
- * Ensures that the handler logic focuses on returning a Response object,
- * potentially using the provided response helpers (OK, Created, etc.).
- *
+ * Wraps an EmmettHonoHandler to be used as a Hono route handler.
+ * In practice, this just returns the handler itself since the signatures are compatible.
+ * (This function exists for API symmetry with other Emmett adapters, and future extensibility.)
  * @param handle - The EmmettHonoHandler function to wrap.
- * @returns A Hono Handler function.
+ * @returns A Hono-compatible handler function.
  */
-export const on =
-  (handle: EmmettHonoHandler): Handler =>
-  (c: Context): Response | Promise<Response> => {
-    // Directly call the Emmett handler and return its Response or Promise<Response>
-    return handle(c);
-  };
+export function on(handle: EmmettHonoHandler): Handler {
+  return (c: Context) => handle(c);
+}
 
-// Response Helper Functions (using the send* functions from responses.ts)
+// Response helper generators:
 
-/**
- * Creates a 200 OK response.
- * @param options - Optional response configuration.
- * @returns A function that takes Hono Context and returns a Response.
- */
-export const OK =
-  (options?: HttpResponseOptions): EmmettHonoHandler =>
-  (c: Context) => {
-    return send(c, 200, options);
-  };
+/** Returns a handler that sends a 200 OK response with optional body, headers, etc. */
+export function OK(options?: HttpResponseOptions): EmmettHonoHandler {
+  return (c: Context) => send(c, 200, options);
+}
 
-/**
- * Creates a 201 Created response.
- * @param options - Configuration for the created response (createdId or url).
- * @returns A function that takes Hono Context and returns a Response.
- */
-export const Created =
-  (options: CreatedHttpResponseOptions): EmmettHonoHandler =>
-  (c: Context) => {
-    return sendCreated(c, options);
-  };
+/** Returns a handler that sends a 201 Created response. */
+export function Created(
+  options: CreatedHttpResponseOptions,
+): EmmettHonoHandler {
+  return (c: Context) => sendCreated(c, options);
+}
 
-/**
- * Creates a 202 Accepted response.
- * @param options - Configuration for the accepted response (location).
- * @returns A function that takes Hono Context and returns a Response.
- */
-export const Accepted =
-  (options: AcceptedHttpResponseOptions): EmmettHonoHandler =>
-  (c: Context) => {
-    return sendAccepted(c, options);
-  };
+/** Returns a handler that sends a 202 Accepted response. */
+export function Accepted(
+  options: AcceptedHttpResponseOptions,
+): EmmettHonoHandler {
+  return (c: Context) => sendAccepted(c, options);
+}
 
-/**
- * Creates a 204 No Content response.
- * @param options - Optional response configuration (e.g., ETag, Location).
- * @returns A function that takes Hono Context and returns a Response.
- */
-export const NoContent =
-  (options?: NoContentHttpResponseOptions): EmmettHonoHandler =>
-  (c: Context) => {
-    return sendNoContent(c, options);
-  };
+/** Returns a handler that sends a 204 No Content response. */
+export function NoContent(
+  options?: NoContentHttpResponseOptions,
+): EmmettHonoHandler {
+  return (c: Context) => sendNoContent(c, options);
+}
 
-/**
- * Creates a generic HTTP response with a specific status code.
- * @param statusCode - The HTTP status code.
- * @param options - Optional response configuration.
- * @returns A function that takes Hono Context and returns a Response.
- */
-export const HttpResponse =
-  (statusCode: number, options?: HttpResponseOptions): EmmettHonoHandler =>
-  (c: Context) => {
-    // Cast statusCode as Hono might require specific types in `send`
-    return send(c, statusCode as StatusCode, options);
-  };
+/** Returns a handler that sends a generic HTTP response with the given status code. */
+export function HttpResponse(
+  statusCode: number,
+  options?: HttpResponseOptions,
+): EmmettHonoHandler {
+  return (c: Context) => send(c, statusCode as StatusCode, options);
+}
 
-// Error Response Helper Functions
+// Error/Problem response helpers:
 
-/**
- * Creates a 400 Bad Request Problem Details response.
- * @param options - Optional problem details configuration.
- * @returns A function that takes Hono Context and returns a Response.
- */
-export const BadRequest = (
+/** Returns a handler that sends a 400 Bad Request (Problem Details) response. */
+export function BadRequest(
   options?: HttpProblemResponseOptions,
-): EmmettHonoHandler => HttpProblem(400, options);
+): EmmettHonoHandler {
+  return HttpProblem(400, options);
+}
 
-/**
- * Creates a 403 Forbidden Problem Details response.
- * @param options - Optional problem details configuration.
- * @returns A function that takes Hono Context and returns a Response.
- */
-export const Forbidden = (
+/** Returns a handler that sends a 403 Forbidden (Problem Details) response. */
+export function Forbidden(
   options?: HttpProblemResponseOptions,
-): EmmettHonoHandler => HttpProblem(403, options);
+): EmmettHonoHandler {
+  return HttpProblem(403, options);
+}
 
-/**
- * Creates a 404 Not Found Problem Details response.
- * @param options - Optional problem details configuration.
- * @returns A function that takes Hono Context and returns a Response.
- */
-export const NotFound = (
+/** Returns a handler that sends a 404 Not Found (Problem Details) response. */
+export function NotFound(
   options?: HttpProblemResponseOptions,
-): EmmettHonoHandler => HttpProblem(404, options);
+): EmmettHonoHandler {
+  return HttpProblem(404, options);
+}
 
-/**
- * Creates a 409 Conflict Problem Details response.
- * @param options - Optional problem details configuration.
- * @returns A function that takes Hono Context and returns a Response.
- */
-export const Conflict = (
+/** Returns a handler that sends a 409 Conflict (Problem Details) response. */
+export function Conflict(
   options?: HttpProblemResponseOptions,
-): EmmettHonoHandler => HttpProblem(409, options);
+): EmmettHonoHandler {
+  return HttpProblem(409, options);
+}
 
-/**
- * Creates a 412 Precondition Failed Problem Details response.
- * @param options - Problem details configuration.
- * @returns A function that takes Hono Context and returns a Response.
- */
-export const PreconditionFailed = (
+/** Returns a handler that sends a 412 Precondition Failed (Problem Details) response. */
+export function PreconditionFailed(
   options: HttpProblemResponseOptions,
-): EmmettHonoHandler => HttpProblem(412, options);
+): EmmettHonoHandler {
+  return HttpProblem(412, options);
+}
 
 /**
- * Creates an RFC 7807 Problem Details response with a specific status code.
- * @param statusCode - The HTTP status code.
- * @param options - Optional problem details configuration.
- * @returns A function that takes Hono Context and returns a Response.
+ * Returns a handler that sends a Problem Details response with an arbitrary status code.
+ * @param statusCode - HTTP status for the problem.
+ * @param options - Problem details configuration.
  */
-export const HttpProblem =
-  (
-    statusCode: number,
-    options?: HttpProblemResponseOptions,
-  ): EmmettHonoHandler =>
-  (c: Context) => {
-    // Cast statusCode as Hono might require specific types in `sendProblem`
-    return sendProblem(c, statusCode as StatusCode, options);
-  };
+export function HttpProblem(
+  statusCode: number,
+  options?: HttpProblemResponseOptions,
+): EmmettHonoHandler {
+  return (c: Context) => sendProblem(c, statusCode as StatusCode, options);
+}
+```
+
+## packages/emmett-hono/src/application.ts
+
+```ts
+import { Hono } from 'hono';
+import type { Context } from 'hono';
+import type { ApplicationOptions } from './types';
+import { applyCors } from './middlewares/cors';
+import { applyETag } from './middlewares/etag';
+import { applyLogger } from './middlewares/logger';
+import { problemDetailsHandler } from './middlewares/problemDetails';
+import type { Response } from 'express';
+
+/**
+ * Creates and configures a Hono application instance based on provided options.
+ * @param options - Configuration options for the application.
+ * @returns A configured Hono instance ready to handle requests.
+ */
+export function getApplication(options: ApplicationOptions): Hono {
+  const app = new Hono();
+
+  const {
+    apis,
+    enableCors = false,
+    corsOptions,
+    enableETag = false,
+    etagOptions,
+    enableLogger = false,
+    loggerOptions,
+    mapError,
+    disableProblemDetails = false,
+  } = options;
+
+  // Apply logger middleware first (to capture timing for all subsequent handlers)
+  if (enableLogger) {
+    applyLogger(app, loggerOptions);
+  }
+  // Apply CORS middleware if enabled
+  if (enableCors) {
+    applyCors(app, corsOptions);
+  }
+  // Apply ETag middleware if enabled
+  if (enableETag) {
+    applyETag(app, etagOptions);
+  }
+
+  // Register all API routes
+  for (const api of apis) {
+    api(app);
+  }
+
+  // Global error handler: convert errors to Problem Details responses if not disabled
+  if (!disableProblemDetails) {
+    app.onError(problemDetailsHandler(mapError));
+  }
+
+  return app;
+}

@@ -1,0 +1,3 @@
+name = "emmett-hono-dev"
+main = "dist/worker.js"
+compatibility_date = "2025-04-29"

@@ -1,236 +1,178 @@
 import type { Context } from 'hono';
-import type { ContentfulStatusCode, StatusCode } from 'hono/utils/http-status';
-import { ProblemDocument } from 'http-problem-details';
-import type { ETag } from './etag'; // Placeholder import
-import { setETag } from './etag'; // Placeholder import
+import type { StatusCode } from 'hono/utils/http-status';
+import { ProblemDocument } from './types';
+import type { Response } from 'express';
 
-// General options for standard HTTP responses
+/**
+ * General options for HTTP responses.
+ */
 export type HttpResponseOptions = {
+  /** Response body. If an object is provided, it will be JSON-stringified. */
   body?: unknown;
+  /** Location header (for redirects or newly created resources). */
   location?: string;
-  eTag?: ETag;
-};
-export const DefaultHttpResponseOptions: HttpResponseOptions = {};
-
-// Options specific to Problem Details responses (RFC 7807)
-export type HttpProblemResponseOptions = {
-  location?: string;
-  eTag?: ETag;
-} & Omit<HttpResponseOptions, 'body'> &
-  (
-    | {
-        problem: ProblemDocument;
-      }
-    | { problemDetails: string }
-  );
-export const DefaultHttpProblemResponseOptions: HttpProblemResponseOptions = {
-  problemDetails: 'Error occurred!',
+  /** ETag header value to include. */
+  eTag?: string;
 };
 
-// Options for 201 Created responses
+/** Options for 201 Created responses. Must include either a new resource ID or a direct URL. */
 export type CreatedHttpResponseOptions = (
-  | {
-      createdId: string;
-    }
-  | {
-      createdId?: string;
-      url: string;
-    }
+  | { createdId: string; url?: string }
+  | { url: string }
 ) &
   HttpResponseOptions;
 
-// Options for 202 Accepted responses
+/** Options for 202 Accepted responses. Must include a location where the resource will be available. */
 export type AcceptedHttpResponseOptions = {
   location: string;
 } & HttpResponseOptions;
 
-// Options for 204 No Content responses
+/** Options for 204 No Content responses (no body allowed). */
 export type NoContentHttpResponseOptions = Omit<HttpResponseOptions, 'body'>;
 
-// Helper type for Hono headers
-// Use a standard Record type for headers passed to Hono helpers
-type _HonoHeaders = Record<string, string | string[]> | Headers;
+/** Options for Problem Details responses. You can provide a full ProblemDocument or just details. */
+export type HttpProblemResponseOptions = {
+  /** If you already have a ProblemDocument instance, provide it here. */
+  problem?: ProblemDocument;
+  /** If not providing a full ProblemDocument, a detail message for the problem. */
+  problemDetails?: string;
+  /** Optional Location header for the problem response (rarely used). */
+  location?: string;
+  /** Optional ETag header for the problem response. */
+  eTag?: string;
+};
 
 /**
- * Sends a standard HTTP response using the Hono context.
- * Adapts the response based on the body type and options provided.
- *
- * @param c - The Hono context object.
- * @param statusCode - The HTTP status code (must be a valid Hono StatusCode).
- * @param options - Optional response configuration (body, headers).
- * @returns A Response object.
+ * Low-level send function to construct a Response with given status and options.
+ * This function handles different body types (Response, object, string, null) and sets headers like ETag/Location.
  */
-export const send = (
+export function send(
   c: Context,
   statusCode: StatusCode,
   options?: HttpResponseOptions,
-): Response => {
-  const { location, body, eTag } = options ?? DefaultHttpResponseOptions;
-  const headers: Record<string, string> = {}; // Use simple Record for headers object
-
-  // Set Headers
-  if (eTag) setETag(c, eTag); // Assume this modifies c.res or we handle it differently
+): Response {
+  const { body, location, eTag } = options ?? {};
+  const headers: Record<string, string> = {};
   if (location) headers['Location'] = location;
-  if (eTag) headers['ETag'] = eTag; // Add ETag to headers object
+  if (eTag) headers['ETag'] = eTag;
 
-  // Use ContentfulStatusCode type where Hono expects it
-  const contentfulStatusCode = statusCode as ContentfulStatusCode;
-
+  // If body is provided, determine how to send it
   if (body !== undefined && body !== null) {
-    // If body is already a Response, handle headers carefully
     if (body instanceof Response) {
-      const responseHeaders = new Headers(body.headers);
-      // Ensure value is string for Headers.set
-      Object.entries(headers).forEach(([key, value]) => {
-        if (typeof value === 'string') {
-          responseHeaders.set(key, value);
-        }
-        // Note: Headers standard doesn't directly support string arrays,
-        // usually requires multiple 'append' calls or comma-separated string.
-        // For simplicity here, we'll assume single string values for now.
-      });
-      // Return new Response as original might be immutable or lack status setting method
+      // If body is already a Response object, merge status and headers
+      const respHeaders = new Headers(body.headers);
+      Object.entries(headers).forEach(([key, value]) =>
+        respHeaders.set(key, value),
+      );
+      // Use original body and new status/headers
       return new Response(body.body, {
         status: statusCode,
-        headers: responseHeaders,
+        headers: respHeaders,
       });
     }
-    // For other body types...
-    if (typeof body === 'string') {
-      // Handle string body
-      if (statusCode >= 200 && statusCode !== 204 && statusCode !== 304) {
-        return c.text(body, contentfulStatusCode, headers);
+    if (typeof body === 'object') {
+      // For object bodies, return JSON response (if status code allows a body)
+      if (statusCode !== 204 && statusCode !== 304) {
+        return c.json(body, statusCode, headers);
       } else {
-        return new Response(body, { status: statusCode, headers });
-      }
-    } else if (typeof body === 'object') {
-      // Handle object body
-      if (statusCode >= 200 && statusCode !== 204 && statusCode !== 304) {
-        return c.json(body, contentfulStatusCode, headers);
-      } else {
+        // If no content allowed but object provided, stringify anyway (unusual case)
         return new Response(JSON.stringify(body), {
           status: statusCode,
           headers: { ...headers, 'Content-Type': 'application/json' },
         });
       }
+    }
+    // For string or other primitive types:
+    if (statusCode !== 204 && statusCode !== 304) {
+      return c.text(String(body), statusCode, headers);
     } else {
-      // Handle other primitives (number, boolean, etc.) by converting to string
-      const bodyAsString = String(body);
-      if (statusCode >= 200 && statusCode !== 204 && statusCode !== 304) {
-        return c.text(bodyAsString, contentfulStatusCode, headers);
-      } else {
-        return new Response(bodyAsString, { status: statusCode, headers });
-      }
+      // 204/304 should not have a body. Return with headers only.
+      return new Response(null, { status: statusCode, headers });
     }
   } else {
-    // For responses without a body (like 204)
-    // Use new Response directly as c.body(null, ...) is problematic
+    // No body provided (e.g., 204 No Content)
     return new Response(null, { status: statusCode, headers });
   }
-};
+}
 
 /**
  * Sends a 201 Created response.
+ * If a `createdId` is provided, includes it in the response body (JSON: `{ id: ... }`).
+ * Also sets the Location header to the resource URL if provided or derived.
  */
-export const sendCreated = (
+export function sendCreated(
   c: Context,
   options: CreatedHttpResponseOptions,
-): Response => {
-  // Created ID response should contain a body with the ID
-  const body = 'createdId' in options ? { id: options.createdId } : undefined;
-
-  // Create a new response with the appropriate body and status
-  if (body) {
-    const resp = c.json(body, 201);
-
-    // Add/preserve the location header
-    const existingLocation =
-      c.req.header('location') || c.res.headers.get('location');
-    if (existingLocation) {
-      resp.headers.set('location', existingLocation);
-    } else if ('url' in options) {
-      resp.headers.set('location', options.url);
-    } else if ('createdId' in options) {
-      const url = `${c.req.url.endsWith('/') ? c.req.url : c.req.url + '/'}${options.createdId}`;
-      resp.headers.set('location', url);
-    }
-
-    return resp;
+): Response {
+  // Determine body content for Created: if createdId is present, respond with { id: createdId }
+  const bodyContent =
+    'createdId' in options ? { id: options.createdId } : undefined;
+  let resp: Response;
+  if (bodyContent !== undefined) {
+    resp = c.json(bodyContent, 201);
   } else {
-    // Handle case without a body (just URL)
-    const resp = new Response(null, { status: 201 });
-
-    // Set location header
-    if ('url' in options) {
-      resp.headers.set('location', options.url);
-    }
-
-    return resp;
+    resp = new Response(null, { status: 201 });
   }
-};
+  // Set Location header:
+  if ('url' in options && options.url) {
+    resp.headers.set('Location', options.url);
+  } else if ('createdId' in options && options.createdId) {
+    // If URL not explicitly given, derive from request URL and createdId
+    const baseUrl = c.req.url;
+    const separator = baseUrl.endsWith('/') ? '' : '/';
+    resp.headers.set('Location', baseUrl + separator + options.createdId);
+  }
+  return resp;
+}
 
-/**
- * Sends a 202 Accepted response.
- */
-export const sendAccepted = (
+/** Sends a 202 Accepted response, using the general send function. */
+export function sendAccepted(
   c: Context,
   options: AcceptedHttpResponseOptions,
-): Response => {
-  // 202 is a ContentfulStatusCode
+): Response {
   return send(c, 202, options);
-};
+}
 
-/**
- * Sends a 204 No Content response.
- */
-export const sendNoContent = (
+/** Sends a 204 No Content response. */
+export function sendNoContent(
   c: Context,
   options?: NoContentHttpResponseOptions,
-): Response => {
-  // 204 is NOT a ContentfulStatusCode, use new Response directly
+): Response {
   const headers: Record<string, string> = {};
   if (options?.eTag) headers['ETag'] = options.eTag;
-  if (options?.location) headers['Location'] = options.location; // Though unusual for 204
-
+  if (options?.location) headers['Location'] = options.location;
   return new Response(null, { status: 204, headers });
-};
+}
 
 /**
- * Sends an RFC 7807 Problem Details response.
+ * Sends a Problem Details response (application/problem+json).
+ * Uses the provided ProblemDocument or constructs one from a detail message.
  */
-export const sendProblem = (
+export function sendProblem(
   c: Context,
-  statusCode: StatusCode, // Keep general StatusCode here, check below
+  statusCode: StatusCode,
   options?: HttpProblemResponseOptions,
-): Response => {
-  options = options ?? DefaultHttpProblemResponseOptions;
-  const { location, eTag } = options;
-
-  const problemDetails =
-    'problem' in options
-      ? options.problem
-      : new ProblemDocument({
-          detail: options.problemDetails,
-          status: statusCode,
-        });
-
+): Response {
+  const { problem, problemDetails, location, eTag } = options ?? {};
+  const problemDoc: ProblemDocument = problem
+    ? problem
+    : new ProblemDocument({
+        status: statusCode as number,
+        detail: problemDetails || '',
+      });
   const headers: Record<string, string> = {
     'Content-Type': 'application/problem+json',
   };
-
-  // Set Headers
-  if (eTag) setETag(c, eTag); // Placeholder usage
   if (location) headers['Location'] = location;
   if (eTag) headers['ETag'] = eTag;
-
-  // Ensure status code is contentful for c.json
-  if (statusCode >= 200 && statusCode !== 204 && statusCode !== 304) {
-    return c.json(problemDetails, statusCode as ContentfulStatusCode, headers);
+  // Ensure status code is appropriate for content
+  if (statusCode !== 204 && statusCode !== 304) {
+    return c.json(problemDoc, statusCode as StatusCode, headers);
   } else {
-    // Fallback for potentially non-contentful status codes (e.g., if mapping results in one)
-    return new Response(JSON.stringify(problemDetails), {
+    // If a 204/304 with a problem (rare), just send JSON manually
+    return new Response(JSON.stringify(problemDoc), {
       status: statusCode,
       headers,
     });
   }
-};
+}

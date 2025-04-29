@@ -1,34 +1,16 @@
 import { Hono } from 'hono';
-import { applyCors, type CorsOptions } from './middlewares/corsMiddleware';
-import { applyETag, type ETagOptions } from './middlewares/etagMiddleware';
-import {
-  applyLogger,
-  type LoggerOptions,
-} from './middlewares/loggerMiddleware';
-import type { WebApiSetup } from './types';
-// Import Problem Details types later when middleware is added
-// import type { ErrorToProblemDetailsMapping } from './responses';
-
-// Options for configuring the Hono application
-export type ApplicationOptions = {
-  apis: WebApiSetup[];
-  enableCors?: boolean;
-  corsOptions?: CorsOptions;
-  enableETag?: boolean;
-  etagOptions?: ETagOptions;
-  enableLogger?: boolean;
-  loggerOptions?: LoggerOptions;
-  // mapError?: ErrorToProblemDetailsMapping; // Add later for problem details
-  // Add other Hono-specific options if needed, e.g., default middleware toggles
-};
+import { applyCors } from './middlewares/cors';
+import { applyETag } from './middlewares/etag';
+import { applyLogger } from './middlewares/logger';
+import { problemDetailsHandler } from './middlewares/problemDetails';
+import type { ApplicationOptions } from './types';
 
 /**
- * Creates and configures a Hono application instance.
- *
+ * Creates and configures a Hono application instance based on provided options.
  * @param options - Configuration options for the application.
- * @returns A configured Hono instance.
+ * @returns A configured Hono instance ready to handle requests.
  */
-export const getApplication = (options: ApplicationOptions): Hono => {
+export function getApplication(options: ApplicationOptions): Hono {
   const app = new Hono();
 
   const {
@@ -39,35 +21,32 @@ export const getApplication = (options: ApplicationOptions): Hono => {
     etagOptions,
     enableLogger = false,
     loggerOptions,
-    // mapError, // Add later
+    mapError,
+    disableProblemDetails = false,
   } = options;
 
-  // Apply logger middleware first (if enabled) to capture timing accurately
+  // Apply logger middleware first (to capture timing for all subsequent handlers)
   if (enableLogger) {
     applyLogger(app, loggerOptions);
   }
-
   // Apply CORS middleware if enabled
   if (enableCors) {
     applyCors(app, corsOptions);
   }
-
   // Apply ETag middleware if enabled
   if (enableETag) {
     applyETag(app, etagOptions);
   }
 
-  // Apply all provided API setups (route configurations)
+  // Register all API routes
   for (const api of apis) {
     api(app);
   }
 
-  // Add problem details middleware later
-  // if (!disableProblemDetailsMiddleware)
-  //   app.onError(problemDetailsHandler(mapError));
+  // Global error handler: convert errors to Problem Details responses if not disabled
+  if (!disableProblemDetails) {
+    app.onError(problemDetailsHandler(mapError));
+  }
 
   return app;
-};
-
-// Add startAPI function later if needed, similar to expressjs adapter,
-// although Hono apps are typically run directly by the environment (e.g., Cloudflare Workers, Deno, Bun serve)
+}
