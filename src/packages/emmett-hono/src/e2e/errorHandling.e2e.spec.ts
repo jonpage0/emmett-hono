@@ -52,7 +52,8 @@ const getApplication = () => {
     // Emmett's ConcurrencyError - should map to 412
     .get('/error/concurrency', () => {
       // Full constructor with expected version and actual version
-      throw new ConcurrencyError(42, 43, 'Concurrency check failed');
+      // Convert numbers to strings as expected by the constructor
+      throw new ConcurrencyError('42', '43', 'Concurrency check failed');
     })
 
     // Generic Error - should map to 500
@@ -121,119 +122,119 @@ const givenWithCustomMapper = ApiSpecification.for(
   (_eventStore: EventStore) => getApplicationWithCustomMapper(),
 );
 
-// Helper to suppress console.error during specific tests
-function suppressConsoleError<T>(fn: () => Promise<T>): Promise<T> {
-  const originalConsoleError = console.error;
-  console.error = () => {};
-  return fn().finally(() => {
-    console.error = originalConsoleError;
-  });
-}
+void describe('Hono Error Handling with Problem Details', () => {
+  void describe('HTTPException handling', () => {
+    void it('should convert HTTPException to Problem Details response with status 400', async () => {
+      const response = await given().when((app) =>
+        app.request(new Request('http://localhost/error/http-exception')),
+      );
 
-describe('Hono Error Handling with Problem Details', () => {
-  describe('HTTPException handling', () => {
-    it('should convert HTTPException to Problem Details response with status 400', async () => {
-      await suppressConsoleError(async () => {
-        const response = await given().when((app) =>
-          app.request(new Request('http://localhost/error/http-exception')),
-        );
-        assert.equal(response.status, 400);
-        const body = await response.json();
-        assert.ok(
-          body.title === 'Bad Request' ||
-            body.title === 'Bad request from HTTPException',
-        );
-        assert.equal(body.status, 400);
-      });
+      assert.equal(response.status, 400);
+      const body = await response.json();
+      // The title may be normalized to 'Bad Request' by the middleware
+      assert.ok(
+        body.title === 'Bad Request' ||
+          body.title === 'Bad request from HTTPException',
+      );
+      assert.equal(body.status, 400);
     });
   });
 
-  describe('Emmett ValidationError handling', () => {
-    it('should convert ValidationError to Problem Details response with status 400', async () => {
-      await suppressConsoleError(async () => {
-        const response = await given().when((app) =>
-          app.request(new Request('http://localhost/error/validation')),
-        );
-        assert.equal(response.status, 400);
-        const body = await response.json();
-        assert.equal(body.title, 'Bad Request');
-        assert.equal(body.detail, 'Invalid data provided');
-        assert.equal(body.status, 400);
-      });
+  void describe('Emmett ValidationError handling', () => {
+    void it('should convert ValidationError to Problem Details response with status 400', async () => {
+      const response = await given().when((app) =>
+        app.request(new Request('http://localhost/error/validation')),
+      );
+
+      assert.equal(response.status, 400);
+      const body = await response.json();
+      assert.equal(body.title, 'Bad Request');
+      assert.equal(body.detail, 'Invalid data provided');
+      assert.equal(body.status, 400);
     });
   });
 
-  describe('Emmett IllegalStateError handling', () => {
-    it('should convert IllegalStateError to Problem Details response with status 403', async () => {
-      await suppressConsoleError(async () => {
-        const response = await given().when((app) =>
-          app.request(new Request('http://localhost/error/illegal-state')),
-        );
-        assert.equal(response.status, 403);
-        const body = await response.json();
-        assert.equal(body.title, 'Forbidden');
-        assert.equal(body.detail, 'Operation not allowed in current state');
-        assert.equal(body.status, 403);
-      });
+  void describe('Emmett IllegalStateError handling', () => {
+    void it('should convert IllegalStateError to Problem Details response with status 403', async () => {
+      const response = await given().when((app) =>
+        app.request(new Request('http://localhost/error/illegal-state')),
+      );
+
+      assert.equal(response.status, 403);
+      const body = await response.json();
+      assert.equal(body.title, 'Forbidden');
+      assert.equal(body.detail, 'Operation not allowed in current state');
+      assert.equal(body.status, 403);
     });
   });
 
-  describe('Emmett NotFoundError handling', () => {
-    it('should convert NotFoundError to Problem Details response with status 404', async () => {
-      await suppressConsoleError(async () => {
-        const response = await given().when((app) =>
-          app.request(new Request('http://localhost/error/not-found')),
-        );
-        assert.equal(response.status, 404);
-        const body = await response.json();
-        assert.equal(body.title, 'Not Found');
-        assert.equal(body.detail, 'Resource not found');
-        assert.equal(body.status, 404);
-      });
+  void describe('Emmett NotFoundError handling', () => {
+    void it('should convert NotFoundError to Problem Details response with status 404', async () => {
+      const response = await given().when((app) =>
+        app.request(new Request('http://localhost/error/not-found')),
+      );
+
+      assert.equal(response.status, 404);
+      const body = await response.json();
+      assert.equal(body.title, 'Not Found');
+      assert.equal(body.detail, 'Resource not found');
+      assert.equal(body.status, 404);
     });
   });
 
-  describe('Emmett ConcurrencyError handling', () => {
-    it('should convert ConcurrencyError to Problem Details response with status 412', async () => {
-      await suppressConsoleError(async () => {
-        const response = await given().when((app) =>
-          app.request(new Request('http://localhost/error/concurrency')),
-        );
-        assert.equal(response.status, 412);
-        const body = await response.json();
-        assert.equal(body.title, 'Precondition Failed');
-        assert.equal(body.status, 412);
-      });
+  void describe('Emmett ConcurrencyError handling', () => {
+    void it('should convert ConcurrencyError to Problem Details response with status 412', async () => {
+      const response = await given().when((app) =>
+        app.request(new Request('http://localhost/error/concurrency')),
+      );
+
+      assert.equal(response.status, 412);
+      const body = await response.json();
+      assert.equal(body.title, 'Precondition Failed');
+      assert.equal(body.status, 412);
     });
   });
 
-  describe('Generic Error handling', () => {
-    it('should convert generic Error to Problem Details response with status 500', async () => {
-      await suppressConsoleError(async () => {
+  void describe('Generic Error handling', () => {
+    void it('should convert generic Error to Problem Details response with status 500', async () => {
+      // Temporarily silence console.error for this specific test
+      const originalConsoleError = console.error;
+      console.error = () => {};
+
+      try {
         const response = await given().when((app) =>
           app.request(new Request('http://localhost/error/generic')),
         );
+
         assert.equal(response.status, 500);
         const body = await response.json();
         assert.equal(body.title, 'Internal Server Error');
         assert.equal(body.detail, 'Something went wrong');
         assert.equal(body.status, 500);
-      });
+      } finally {
+        // Restore original console.error
+        console.error = originalConsoleError;
+      }
     });
   });
 
-  describe('Custom error mapping', () => {
-    it('should use custom error mapper for specific error types', async () => {
-      await suppressConsoleError(async () => {
-        const response = await givenWithCustomMapper().when((app) =>
-          app.request(new Request('http://localhost/error/custom')),
-        );
-        assert.equal(response.status, 418);
-        const body = await response.json();
-        assert.equal(body.status, 418);
-        // Only check that we got a response with a body, not specific field values
-        assert.ok(body, 'Response body should exist');
-      });
+  void describe('Custom error mapping', () => {
+    void it('should use custom error mapper for specific error types', async () => {
+      const response = await givenWithCustomMapper().when((app) =>
+        app.request(new Request('http://localhost/error/custom')),
+      );
+
+      assert.equal(response.status, 418);
+      const body = await response.json();
+
+      // Verify it's a proper problem details object with the expected status
+      assert.equal(body.status, 418);
+
+      // Log the actual content for debugging
+      console.log('Custom error response body:', body);
+
+      // Only check that we got a response with a body, not specific field values
+      assert.ok(body, 'Response body should exist');
     });
   });
 });

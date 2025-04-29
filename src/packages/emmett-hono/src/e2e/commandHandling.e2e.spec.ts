@@ -245,7 +245,10 @@ describe('Command Handling Integration', () => {
 
           // Rebuild state from events
           for (const event of events.events) {
-            currentState = evolve(currentState, event as CounterEvents);
+            currentState = evolve(
+              currentState,
+              event as unknown as CounterEvents,
+            );
           }
 
           // Return a response with ETag
@@ -326,11 +329,11 @@ describe('Command Handling Integration', () => {
     const events = await eventStore.readStream('counter-123');
     assert.strictEqual(events.events.length, 1);
     assert.strictEqual(
-      (events.events[0] as CounterEvents).type,
+      (events.events[0] as unknown as CounterEvents).type,
       'CounterCreated',
     );
     assert.strictEqual(
-      (events.events[0] as CounterCreated).data.initialValue,
+      (events.events[0] as unknown as CounterCreated).data.initialValue,
       5,
     );
   });
@@ -406,7 +409,10 @@ describe('Command Handling Integration', () => {
 
           // Rebuild state from events
           for (const event of events.events) {
-            currentState = evolve(currentState, event as CounterEvents);
+            currentState = evolve(
+              currentState,
+              event as unknown as CounterEvents,
+            );
           }
 
           return c.json(
@@ -503,268 +509,295 @@ describe('Command Handling Integration', () => {
     const events = await eventStore.readStream('counter-456');
     assert.strictEqual(events.events.length, 2);
     assert.strictEqual(
-      (events.events[0] as CounterEvents).type,
+      (events.events[0] as unknown as CounterEvents).type,
       'CounterCreated',
     );
     assert.strictEqual(
-      (events.events[1] as CounterEvents).type,
+      (events.events[1] as unknown as CounterEvents).type,
       'CounterIncremented',
     );
     assert.strictEqual(
-      (events.events[1] as CounterIncremented).data.increment,
+      (events.events[1] as unknown as CounterIncremented).data.increment,
       5,
     );
   });
 
   it('should handle concurrency failures correctly', async () => {
-    // Arrange
-    const { eventStore, commandHandler } = createCommandHandler();
+    // Temporarily silence console.error for this specific test
+    const originalConsoleError = console.error;
+    console.error = () => {}; // eslint-disable-line @typescript-eslint/no-empty-function
 
-    const apiSetup = (app: Hono) => {
-      // POST endpoint to create counter
-      app.post('/counters', async (c) => {
-        try {
-          const body = await c.req.json();
-          const command: CreateCounter = {
-            type: 'CreateCounter',
-            id: body.id || 'counter-1',
-            initialValue: body.initialValue || 0,
-          };
+    try {
+      // Arrange
+      const { eventStore, commandHandler } = createCommandHandler();
 
-          const result = await commandHandler.handle(command);
-
-          const event = result.events[0] as CounterCreated;
-          const initialValue = event.data.initialValue;
-
-          return c.json(
-            {
-              id: command.id,
-              value: initialValue,
-            },
-            200,
-            {
-              ETag: toWeakETag(result.nextExpectedStreamVersion),
-            },
-          );
-        } catch (error) {
-          console.error('Error in concurrency failures test POST:', error);
-          return c.json({ error: String(error) }, 500);
-        }
-      });
-
-      // PUT endpoint to increment counter
-      app.put('/counters/:id', async (c) => {
-        try {
-          const { id } = c.req.param();
-          if (!id) {
-            return c.json({ error: 'Missing id parameter' }, 400);
-          }
-
-          const body = await c.req.json();
-
-          // Get expected version from If-Match header
-          let expectedVersion: bigint | undefined;
+      const apiSetup = (app: Hono) => {
+        // POST endpoint to create counter
+        app.post('/counters', async (c) => {
           try {
-            const etag = getETagFromIfMatch(c.req);
-            // Get the actual number from weak ETag
-            expectedVersion = BigInt(etag.replace(/W\/"(\d+)"/, '$1'));
+            const body = await c.req.json();
+            const command: CreateCounter = {
+              type: 'CreateCounter',
+              id: body.id || 'counter-1',
+              initialValue: body.initialValue || 0,
+            };
+
+            const result = await commandHandler.handle(command);
+
+            const event = result.events[0] as CounterCreated;
+            const initialValue = event.data.initialValue;
+
+            return c.json(
+              {
+                id: command.id,
+                value: initialValue,
+              },
+              200,
+              {
+                ETag: toWeakETag(result.nextExpectedStreamVersion),
+              },
+            );
           } catch (error) {
-            // No expected version
+            // console.error('Error in concurrency failures test POST:', error);
+            return c.json({ error: String(error) }, 500);
           }
+        });
 
-          // Use a wrong expected version for testing concurrency failures
-          if (body.wrongVersion === true) {
-            // Deliberately use a wrong version to trigger concurrency error
-            expectedVersion = expectedVersion ? expectedVersion + 10n : 999n;
-          }
+        // PUT endpoint to increment counter
+        app.put('/counters/:id', async (c) => {
+          try {
+            const { id } = c.req.param();
+            if (!id) {
+              return c.json({ error: 'Missing id parameter' }, 400);
+            }
 
-          const command: IncrementCounter = {
-            type: 'IncrementCounter',
-            id,
-            increment: body.increment || 1,
-          };
+            const body = await c.req.json();
 
-          const result = await commandHandler.handle(command, {
-            expectedStreamVersion: expectedVersion,
-          });
+            // Get expected version from If-Match header
+            let expectedVersion: bigint | undefined;
+            try {
+              const etag = getETagFromIfMatch(c.req);
+              // Get the actual number from weak ETag
+              expectedVersion = BigInt(etag.replace(/W\/"(\d+)"/, '$1'));
+            } catch (error) {
+              // No expected version
+            }
 
-          // Get updated counter state
-          const events = await eventStore.readStream(id);
-          let currentState: Counter | null = null;
+            // Use a wrong expected version for testing concurrency failures
+            if (body.wrongVersion === true) {
+              // Deliberately use a wrong version to trigger concurrency error
+              expectedVersion = expectedVersion ? expectedVersion + 10n : 999n;
+            }
 
-          // Rebuild state from events
-          for (const event of events.events) {
-            currentState = evolve(currentState, event as CounterEvents);
-          }
-
-          return c.json(
-            {
+            const command: IncrementCounter = {
+              type: 'IncrementCounter',
               id,
-              value: currentState!.value,
-            },
-            200,
-            {
-              ETag: toWeakETag(result.nextExpectedStreamVersion),
-            },
-          );
-        } catch (error) {
-          console.error('Error in concurrency failures test PUT:', error);
+              increment: body.increment || 1,
+            };
 
-          if (error instanceof ConcurrencyError) {
+            const result = await commandHandler.handle(command, {
+              expectedStreamVersion: expectedVersion,
+            });
+
+            // Get updated counter state
+            const events = await eventStore.readStream(id);
+            let currentState: Counter | null = null;
+
+            // Rebuild state from events
+            for (const event of events.events) {
+              currentState = evolve(
+                currentState,
+                event as unknown as CounterEvents,
+              );
+            }
+
             return c.json(
               {
-                title: 'Precondition Failed',
-                detail: error.message,
-                status: 412,
+                id,
+                value: currentState!.value,
               },
-              412,
-            );
-          }
-
-          if (error instanceof IllegalStateError) {
-            return c.json(
+              200,
               {
-                title: 'Forbidden',
-                detail: error.message,
-                status: 403,
+                ETag: toWeakETag(result.nextExpectedStreamVersion),
               },
-              403,
             );
-          }
+          } catch (error) {
+            // console.error('Error in concurrency failures test PUT:', error);
 
-          return c.json({ error: String(error) }, 500);
-        }
+            if (error instanceof ConcurrencyError) {
+              return c.json(
+                {
+                  title: 'Precondition Failed',
+                  detail: error.message,
+                  status: 412,
+                },
+                412,
+              );
+            }
+
+            if (error instanceof IllegalStateError) {
+              return c.json(
+                {
+                  title: 'Forbidden',
+                  detail: error.message,
+                  status: 403,
+                },
+                403,
+              );
+            }
+
+            return c.json({ error: String(error) }, 500);
+          }
+        });
+      };
+
+      const app = getApplication({
+        apis: [apiSetup],
+        // Add error handler / problem details middleware
       });
-    };
 
-    const app = getApplication({
-      apis: [apiSetup],
-      // Add error handler / problem details middleware
-    });
-
-    // Act - Create a counter
-    const createResponse = await app.fetch(
-      new Request('http://localhost/counters', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id: 'counter-789',
-          initialValue: 10,
+      // Act - Create a counter
+      const createResponse = await app.fetch(
+        new Request('http://localhost/counters', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id: 'counter-789',
+            initialValue: 10,
+          }),
         }),
-      }),
-    );
+      );
 
-    // Get ETag from create response
-    const etagAfterCreate = createResponse.headers.get('ETag');
-    assert.ok(etagAfterCreate, 'ETag should be present after create');
+      // Get ETag from create response
+      const etagAfterCreate = createResponse.headers.get('ETag');
+      assert.ok(etagAfterCreate, 'ETag should be present after create');
 
-    // Act - Try to increment counter with wrong ETag (trigger concurrency error)
-    const incrementResponse = await app.fetch(
-      new Request('http://localhost/counters/counter-789', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'If-Match': etagAfterCreate,
-        },
-        body: JSON.stringify({
-          increment: 5,
-          wrongVersion: true, // Signal to use wrong version
+      // Act - Try to increment counter with wrong ETag (trigger concurrency error)
+      const incrementResponse = await app.fetch(
+        new Request('http://localhost/counters/counter-789', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'If-Match': etagAfterCreate,
+          },
+          body: JSON.stringify({
+            increment: 5,
+            wrongVersion: true, // Signal to use wrong version
+          }),
         }),
-      }),
-    );
+      );
 
-    // Assert - Should return a concurrency error (412 Precondition Failed)
-    assert.strictEqual(incrementResponse.status, 412);
-    const errorResponseData = (await incrementResponse.json()) as any;
+      // Assert - Should return a concurrency error (412 Precondition Failed)
+      assert.strictEqual(incrementResponse.status, 412);
+      const errorResponseData = (await incrementResponse.json()) as any;
 
-    // Should have problem details format
-    assert.ok(errorResponseData.title, 'Error response should have a title');
-    assert.ok(errorResponseData.status, 'Error response should have a status');
-    assert.strictEqual(errorResponseData.status, 412);
+      // Should have problem details format
+      assert.ok(errorResponseData.title, 'Error response should have a title');
+      assert.ok(
+        errorResponseData.status,
+        'Error response should have a status',
+      );
+      assert.strictEqual(errorResponseData.status, 412);
+    } finally {
+      // Restore original console.error
+      console.error = originalConsoleError;
+    }
   });
 
   it('should handle business logic errors correctly', async () => {
-    // Arrange
-    const { eventStore, commandHandler } = createCommandHandler();
+    // Temporarily silence console.error for this specific test
+    const originalConsoleError = console.error;
+    console.error = () => {}; // eslint-disable-line @typescript-eslint/no-empty-function
 
-    const apiSetup = (app: Hono) => {
-      // PUT endpoint to increment counter that doesn't exist (triggers business logic error)
-      app.put('/counters/:id', async (c) => {
-        try {
-          const { id } = c.req.param();
-          if (!id) {
-            return c.json({ error: 'Missing id parameter' }, 400);
+    try {
+      // Arrange
+      const { eventStore, commandHandler } = createCommandHandler();
+
+      const apiSetup = (app: Hono) => {
+        // PUT endpoint to increment counter that doesn't exist (triggers business logic error)
+        app.put('/counters/:id', async (c) => {
+          try {
+            const { id } = c.req.param();
+            if (!id) {
+              return c.json({ error: 'Missing id parameter' }, 400);
+            }
+
+            const body = await c.req.json();
+
+            const command: IncrementCounter = {
+              type: 'IncrementCounter',
+              id,
+              increment: body.increment || 1,
+            };
+
+            // This will throw IllegalStateError for non-existent counter
+            const result = await commandHandler.handle(command);
+
+            // This code won't be reached due to the error
+            return c.json({ success: true }, 200);
+          } catch (error) {
+            // console.error('Error in business logic errors test:', error);
+
+            if (error instanceof ConcurrencyError) {
+              return c.json(
+                {
+                  title: 'Precondition Failed',
+                  detail: error.message,
+                  status: 412,
+                },
+                412,
+              );
+            }
+
+            if (error instanceof IllegalStateError) {
+              return c.json(
+                {
+                  title: 'Forbidden',
+                  detail: error.message,
+                  status: 403,
+                },
+                403,
+              );
+            }
+
+            return c.json({ error: String(error) }, 500);
           }
+        });
+      };
 
-          const body = await c.req.json();
-
-          const command: IncrementCounter = {
-            type: 'IncrementCounter',
-            id,
-            increment: body.increment || 1,
-          };
-
-          // This will throw IllegalStateError for non-existent counter
-          const result = await commandHandler.handle(command);
-
-          // This code won't be reached due to the error
-          return c.json({ success: true }, 200);
-        } catch (error) {
-          console.error('Error in business logic errors test:', error);
-
-          if (error instanceof ConcurrencyError) {
-            return c.json(
-              {
-                title: 'Precondition Failed',
-                detail: error.message,
-                status: 412,
-              },
-              412,
-            );
-          }
-
-          if (error instanceof IllegalStateError) {
-            return c.json(
-              {
-                title: 'Forbidden',
-                detail: error.message,
-                status: 403,
-              },
-              403,
-            );
-          }
-
-          return c.json({ error: String(error) }, 500);
-        }
+      const app = getApplication({
+        apis: [apiSetup],
       });
-    };
 
-    const app = getApplication({
-      apis: [apiSetup],
-    });
-
-    // Act - Try to increment a counter that doesn't exist
-    const response = await app.fetch(
-      new Request('http://localhost/counters/non-existent-counter', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          increment: 5,
+      // Act - Try to increment a counter that doesn't exist
+      const response = await app.fetch(
+        new Request('http://localhost/counters/non-existent-counter', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            increment: 5,
+          }),
         }),
-      }),
-    );
+      );
 
-    // Assert - Should return a 403 Forbidden (IllegalStateError)
-    assert.strictEqual(response.status, 403);
-    const errorResponseData = (await response.json()) as any;
+      // Assert - Should return a 403 Forbidden (IllegalStateError)
+      assert.strictEqual(response.status, 403);
+      const errorResponseData = (await response.json()) as any;
 
-    // Should have problem details format
-    assert.ok(errorResponseData.title, 'Error response should have a title');
-    assert.ok(errorResponseData.status, 'Error response should have a status');
-    assert.strictEqual(errorResponseData.status, 403);
+      // Should have problem details format
+      assert.ok(errorResponseData.title, 'Error response should have a title');
+      assert.ok(
+        errorResponseData.status,
+        'Error response should have a status',
+      );
+      assert.strictEqual(errorResponseData.status, 403);
+    } finally {
+      // Restore original console.error
+      console.error = originalConsoleError;
+    }
   });
 });

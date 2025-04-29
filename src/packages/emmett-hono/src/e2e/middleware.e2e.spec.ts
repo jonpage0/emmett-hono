@@ -2,9 +2,9 @@ import assert from 'node:assert';
 import { describe, it } from 'node:test';
 import { getApplication } from '../application';
 
-describe('Middleware Integration', () => {
-  describe('CORS Middleware', () => {
-    it('should apply default CORS headers when enabled', async () => {
+void describe('Middleware Integration', () => {
+  void describe('CORS Middleware', () => {
+    void it('should apply default CORS headers when enabled', async () => {
       // Arrange
       const app = getApplication({
         apis: [], // Empty array as we don't need any APIs for this test
@@ -55,7 +55,7 @@ describe('Middleware Integration', () => {
       );
     });
 
-    it('should not apply CORS headers when disabled', async () => {
+    void it('should not apply CORS headers when disabled', async () => {
       // Arrange
       const app = getApplication({
         apis: [],
@@ -83,8 +83,8 @@ describe('Middleware Integration', () => {
     });
   });
 
-  describe('ETag Middleware', () => {
-    it('should add ETag header to GET responses when enabled', async () => {
+  void describe('ETag Middleware', () => {
+    void it('should add ETag header to GET responses when enabled', async () => {
       // Arrange
       const app = getApplication({
         apis: [],
@@ -112,7 +112,7 @@ describe('Middleware Integration', () => {
       assert.strictEqual(responseBody, responseText);
     });
 
-    it('should not add ETag header when disabled', async () => {
+    void it('should not add ETag header when disabled', async () => {
       // Arrange
       const app = getApplication({
         apis: [],
@@ -137,7 +137,7 @@ describe('Middleware Integration', () => {
       );
     });
 
-    it('should not add ETag header to responses that already have an ETag', async () => {
+    void it('should not add ETag header to responses that already have an ETag', async () => {
       // Arrange
       const app = getApplication({
         apis: [],
@@ -162,7 +162,7 @@ describe('Middleware Integration', () => {
       assert.strictEqual(response.headers.get('ETag'), manualEtag);
     });
 
-    it('should not add ETag header to 204 No Content responses', async () => {
+    void it('should not add ETag header to 204 No Content responses', async () => {
       // Arrange
       const app = getApplication({
         apis: [],
@@ -188,8 +188,8 @@ describe('Middleware Integration', () => {
     });
   });
 
-  describe('Logger Middleware', () => {
-    it('should log requests when enabled', async () => {
+  void describe('Logger Middleware', () => {
+    void it('should log requests when enabled', async () => {
       // Arrange - Create a mock logger
       const logs: string[] = [];
       const mockLogger = (message: string) => {
@@ -225,15 +225,17 @@ describe('Middleware Integration', () => {
       assert.strictEqual(logs.length, 1);
 
       // Log should contain method, URL, status, and timing
-      const logParts = logs[0].split(' ');
+      const firstLog = logs[0];
+      assert.ok(firstLog, 'Log message should exist');
+      const logParts = firstLog.split(' ');
       assert.strictEqual(logParts[0], 'GET');
       assert.strictEqual(logParts[1], 'http://localhost/test-logger');
       assert.strictEqual(logParts[2], '200');
       // Time should be a number followed by 'ms'
-      assert.ok(logParts[3].endsWith('ms'));
+      assert.ok(logParts[3]?.endsWith('ms'), 'Time part should end with ms');
     });
 
-    it('should not log requests when disabled', async () => {
+    void it('should not log requests when disabled', async () => {
       // Arrange - Create a mock logger
       const logs: string[] = [];
       const mockLogger = (message: string) => {
@@ -266,7 +268,7 @@ describe('Middleware Integration', () => {
       assert.strictEqual(logs.length, 0);
     });
 
-    it('should allow custom log formatting', async () => {
+    void it('should allow custom log formatting', async () => {
       // Arrange - Create a mock logger
       const logs: string[] = [];
       const mockLogger = (message: string) => {
@@ -303,45 +305,53 @@ describe('Middleware Integration', () => {
       assert.strictEqual(logs[0], 'CUSTOM GET 200');
     });
 
-    it('should log errors when they occur', async () => {
-      // Arrange - Create a mock logger
-      const logs: string[] = [];
-      const mockLogger = (message: string) => {
-        logs.push(message);
-      };
+    void it('should log errors when they occur', async () => {
+      // Temporarily silence console.error for this specific test
+      const originalConsoleError = console.error;
+      console.error = () => {};
 
-      // Create app with logger enabled
-      const app = getApplication({
-        apis: [],
-        enableLogger: true,
-        loggerOptions: {
-          logger: mockLogger,
-          format: (info) => `${info.method} ${info.status}`, // Simplified format
-        },
-      });
-
-      // Add a route that throws an error
-      app.get('/test-error', () => {
-        throw new Error('Test error');
-      });
-
-      // Act - Send a request that will cause an error
-      let errorResponse;
       try {
-        await app.fetch(
-          new Request('http://localhost/test-error', {
-            method: 'GET',
-          }),
-        );
-      } catch (error) {
-        errorResponse = error;
+        // Arrange - Create a mock logger
+        const logs: string[] = [];
+        const mockLogger = (message: string) => {
+          logs.push(message);
+        };
+
+        // Create app with logger enabled
+        const app = getApplication({
+          apis: [],
+          enableLogger: true,
+          loggerOptions: {
+            logger: mockLogger,
+            format: (info) => `${info.method} ${info.status}`, // Simplified format
+          },
+        });
+
+        // Add a route that throws an error
+        app.get('/test-error', () => {
+          throw new Error('Test error');
+        });
+
+        // Act - Send a request that will cause an error
+        try {
+          await app.fetch(
+            new Request('http://localhost/test-error', {
+              method: 'GET',
+            }),
+          );
+        } catch {
+          // Catch the error but ignore it as it's expected
+        }
+
+        // Assert - Should have logged the error request
+        assert.strictEqual(logs.length, 1);
+
+        // Status should be 500 for errors
+        assert.strictEqual(logs[0], 'GET 500');
+      } finally {
+        // Restore original console.error
+        console.error = originalConsoleError;
       }
-
-      // Assert - Should have logged the error request
-      assert.strictEqual(logs.length, 1);
-
-      // Status should be 500 for errors
-      assert.strictEqual(logs[0], 'GET 500');
     });
   });
 });
