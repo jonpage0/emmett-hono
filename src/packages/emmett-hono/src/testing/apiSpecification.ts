@@ -103,7 +103,7 @@ export const ApiSpecification = {
     return (...givenStreams: TestEventStream<EventType>[]) => {
       const eventStore = WrapEventStore(getEventStore());
       const app = getApplication(eventStore);
-      const client = testClient(app);
+      const _client = testClient(app);
 
       return {
         when: (setupRequest: TestRequest) => {
@@ -124,13 +124,13 @@ export const ApiSpecification = {
               const response = await handle();
 
               if (typeof verify === 'function') {
-                const succeeded = await verify(response);
+                const succeeded = verify(response);
                 if (succeeded === false) assertFails();
               } else if (Array.isArray(verify)) {
                 const [first, ...rest] = verify;
 
                 if (typeof first === 'function') {
-                  const succeeded = await first(response);
+                  const succeeded = first(response);
                   if (succeeded === false) assertFails();
                 }
 

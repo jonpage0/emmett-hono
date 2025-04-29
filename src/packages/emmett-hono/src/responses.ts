@@ -49,7 +49,7 @@ export type NoContentHttpResponseOptions = Omit<HttpResponseOptions, 'body'>;
 
 // Helper type for Hono headers
 // Use a standard Record type for headers passed to Hono helpers
-type HonoHeaders = Record<string, string | string[]> | Headers;
+type _HonoHeaders = Record<string, string | string[]> | Headers;
 
 /**
  * Sends a standard HTTP response using the Hono context.
@@ -95,25 +95,31 @@ export const send = (
         headers: responseHeaders,
       });
     }
-    // For other body types, use Hono's helpers with the HeaderRecord overload
-    if (typeof body === 'object') {
-      // Ensure status code is contentful for c.json
+    // For other body types...
+    if (typeof body === 'string') {
+      // Handle string body
+      if (statusCode >= 200 && statusCode !== 204 && statusCode !== 304) {
+        return c.text(body, contentfulStatusCode, headers);
+      } else {
+        return new Response(body, { status: statusCode, headers });
+      }
+    } else if (typeof body === 'object') {
+      // Handle object body
       if (statusCode >= 200 && statusCode !== 204 && statusCode !== 304) {
         return c.json(body, contentfulStatusCode, headers);
       } else {
-        // Fallback for non-contentful status codes with object body (might be unusual)
         return new Response(JSON.stringify(body), {
           status: statusCode,
           headers: { ...headers, 'Content-Type': 'application/json' },
         });
       }
     } else {
-      // Ensure status code is contentful for c.text
+      // Handle other primitives (number, boolean, etc.) by converting to string
+      const bodyAsString = String(body);
       if (statusCode >= 200 && statusCode !== 204 && statusCode !== 304) {
-        return c.text(body.toString(), contentfulStatusCode, headers);
+        return c.text(bodyAsString, contentfulStatusCode, headers);
       } else {
-        // Fallback for non-contentful status codes with text body
-        return new Response(body.toString(), { status: statusCode, headers });
+        return new Response(bodyAsString, { status: statusCode, headers });
       }
     }
   } else {

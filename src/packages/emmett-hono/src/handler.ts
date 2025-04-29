@@ -1,4 +1,5 @@
 import type { Context, Handler } from 'hono';
+import type { StatusCode } from 'hono/utils/http-status';
 import {
   send,
   sendAccepted,
@@ -95,7 +96,7 @@ export const HttpResponse =
   (statusCode: number, options?: HttpResponseOptions): EmmettHonoHandler =>
   (c: Context) => {
     // Cast statusCode as Hono might require specific types in `send`
-    return send(c, statusCode as any, options);
+    return send(c, statusCode as StatusCode, options);
   };
 
 // Error Response Helper Functions
@@ -158,5 +159,5 @@ export const HttpProblem =
   ): EmmettHonoHandler =>
   (c: Context) => {
     // Cast statusCode as Hono might require specific types in `sendProblem`
-    return sendProblem(c, statusCode as any, options);
+    return sendProblem(c, statusCode as StatusCode, options);
   };
