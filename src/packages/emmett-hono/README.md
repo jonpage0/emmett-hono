@@ -226,3 +226,71 @@ Legacy.Created(...), Legacy.BadRequest(...), ...
 ```
 
 Complete type definitions are generated in \*\*`dist/index.d.ts`
+
+---
+
+Tutorial (step-by-step)
+
+This hands-on walk-through shows the minimum viable setup for a Cloudflare Worker that uses Hono for routing and Emmett for event-sourcing. You'll finish with a fully-typed API that supports optimistic concurrency out of the box.
+
+1 Scaffold a Worker project
+
+pnpm create cloudflare my-todo-api
+cd my-todo-api
+pnpm add hono @event-driven-io/emmett-hono zod @hono/zod-validator
+
+2 Define your routes
+
+// src/routes/todos.ts
+import { z } from 'zod';
+import { zValidator } from '@hono/zod-validator';
+import { sendCreated, sendProblem } from '@event-driven-io/emmett-hono';
+import type { Hono } from 'hono';
+
+const todos: Record<string, { title: string; done: boolean }> = {};
+
+export const registerTodoApi = (app: Hono) => {
+const body = z.object({ title: z.string() });
+
+app.post('/todos',
+zValidator('json', body),
+(c) => {
+const todo = c.req.valid('json');
+const id = crypto.randomUUID();
+todos[id] = { ...todo, done: false };
+return sendCreated(c, { createdId: id });
+});
+
+app.get('/todos/:id', (c) => {
+const id = c.req.param('id');
+const todo = todos[id];
+if (!todo) return sendProblem(c, 404, { problemDetails: 'not found' });
+return c.json(todo);
+});
+};
+
+3 Bootstrap the application
+
+// src/worker.ts
+import { getApplication } from '@event-driven-io/emmett-hono';
+import { registerTodoApi } from './routes/todos';
+
+export default getApplication({
+apis: [registerTodoApi],
+enableCors: true,
+enableETag: true,
+enableLogger: true,
+});
+
+4 Run locally
+
+pnpm dev
+curl http://127.0.0.1:8787/todos \
+ -d '{"title":"build awesome stuff"}' \
+ -H "Content-Type: application/json"
+
+5 Deploy
+
+pnpm build && wrangler deploy
+
+Next steps → Swap the in-memory todos map for a real event store with neonEventStore() and the eventStoreMiddleware() helper. Jump back to the Using Neon section for the full recipe.

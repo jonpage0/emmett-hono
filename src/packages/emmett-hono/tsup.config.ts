@@ -9,8 +9,7 @@ export default defineConfig([
     splitting: true,
     clean: true,
     dts: true,
-    // TODO: For some reason minified code doesn't work for cjs
-    minify: false, //env === 'production',
+    minify: true, //env === 'production',
     bundle: true, //env === 'production',
     skipNodeModulesBundle: true,
     external: ['@event-driven-io/emmett-postgresql', 'pg'], // Mark pgsql and pg as external
@@ -21,6 +20,4 @@ export default defineConfig([
     sourcemap: true,
     tsconfig: 'tsconfig.build.json', // workaround for https://github.com/egoist/tsup/issues/571#issuecomment-1760052931
   },
-  // Removed config for Cloudflare Worker - This package is a library,
-  // users will bundle their own worker using it.
 ]);
