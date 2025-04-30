@@ -2,16 +2,15 @@
 
 _Event-sourced HTTP helpers for **Hono** on **Cloudflare Workers** (and any Fetch-API runtime)._
 
-`emmett-hono` gives you:
+`emmett-hono` streamlines building robust Hono APIs with Emmett by providing:
 
-- A single **`getApplication()`** factory to bootstrap a Hono app with CORS, ETag, structured logging and RFC-7807 _Problem Details_.
-- Thin, explicit **`sendCreated()`** / **`sendProblem()`** utilities that layer cleanly on top of Hono's native `c.json()/c.text()` helpers.
-- A **`Legacy`** compatibility shim that mimics the classic `OK() | Created() | BadRequest()` helpers from `@event-driven-io/emmett-expressjs`, so large code-bases can migrate incrementally.
+- A single **`getApplication()`** factory to bootstrap your Hono app with essential middleware like CORS, ETag handling, structured logging, and RFC-7807 Problem Details error formatting.
+- Idiomatic **response helpers** (e.g., `sendOK()`, `sendCreated()`, `sendProblem()`) that simplify creating consistent HTTP responses, managing ETags, and handling errors gracefully according to best practices.
+- A **`Legacy`** compatibility shim that mimics the classic response helper style from `@event-driven-io/emmett-expressjs`, enabling smoother migration for existing codebases.
 
-> **TL;DR** Use Hono's `c.json()` / `c.text()` for ordinary responses,  
-> `sendCreated()` for **201 Created**, and `sendProblem()` for RFC-7807 error payloads.  
-> Old code can temporarily call `Legacy.Created()` etc. while you refactor.  
-> ⚠️ The **Legacy** helpers will be **removed in v1.0 (planned Q3 2025)** — add the ESLint rule below to keep new code clean.
+> **TL;DR** Use Hono's native `c.json()` / `c.text()` for simple responses.
+> For standardized success and error responses, use Emmett's helpers like `sendOK()`, `sendCreated()`, and `sendProblem()`.
+> The `Legacy.*` helpers are available _only_ to ease migration from `emmett-expressjs` and will be removed in the future.
 
 ---
 
