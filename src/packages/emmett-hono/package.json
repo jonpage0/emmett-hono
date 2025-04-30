@@ -27,9 +27,6 @@
     "build:types": "tsc -p tsconfig.build.json",
     "build:watch": "tsup --watch",
     "clean": "rimraf dist",
-    "dev": "wrangler dev src/worker.ts --local",
-    "preview": "wrangler pages dev ./dist",
-    "deploy": "wrangler publish",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "vitest --dir tests/e2e",
@@ -40,7 +37,6 @@
   "dependencies": {
     "@event-driven-io/emmett": "^0.37.0",
     "@hono/zod-openapi": "^0.9.2",
-    "@neondatabase/serverless": "^1.0.0",
     "@types/pg": "^8.11.14",
     "hono": "^4.4.0",
     "http-problem-details": "^0.1.5",
@@ -66,8 +62,14 @@
   },
   "peerDependencies": {
     "@event-driven-io/emmett": ">=0.37.0",
+    "@neondatabase/serverless": ">=1",
     "hono": ">=4",
     "zod": ">=4.0.0-beta.1"
+  },
+  "peerDependenciesMeta": {
+    "@neondatabase/serverless": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=18"
