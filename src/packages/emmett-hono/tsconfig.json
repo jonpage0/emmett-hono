@@ -7,12 +7,16 @@
     "rootDir": "./src",
     "types": ["node"],
     "paths": {
-      "@event-driven-io/emmett": ["../packages/emmett"]
+      "@event-driven-io/emmett": ["../emmett/src"],
+      "@event-driven-io/emmett-postgresql": ["../emmett-postgresql/src"]
     }
   },
   "references": [
     {
       "path": "../emmett/"
+    },
+    {
+      "path": "../emmett-postgresql/"
     }
   ]
 }

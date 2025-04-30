@@ -13,6 +13,7 @@ export default defineConfig([
     minify: false, //env === 'production',
     bundle: true, //env === 'production',
     skipNodeModulesBundle: true,
+    external: ['@event-driven-io/emmett-postgresql', 'pg'], // Mark pgsql and pg as external
     watch: env === 'development',
     target: 'es2022',
     outDir: 'dist',

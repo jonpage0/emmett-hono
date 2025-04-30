@@ -42,3 +42,11 @@ export type {
   HttpProblemResponseOptions,
   HttpResponseOptions,
 } from './responses'; // Correct path for these types
+
+// Neon Event Store Integration
+export { neonEventStore } from './infra/neonEventStore';
+export {
+  closeEventStore,
+  eventStoreMiddleware,
+  type EventStoreEnv,
+} from './middlewares/eventStore';
