@@ -126,6 +126,41 @@ import { eventStoreMiddleware } from '@event-driven-io/emmett-hono';
 app.use('*', eventStoreMiddleware()); // reads process.env.DATABASE_URL
 ```
 
+While `neonEventStore()` is convenient for standard setups, you can also provide your own pre-configured `PostgresEventStore` instance if you manage your database connection pool elsewhere in your application:
+
+```ts
+import { Hono } from 'hono';
+import { Pool } from 'pg'; // Or your preferred pool/client management
+import { getPostgreSQLEventStore } from '@event-driven-io/emmett-postgresql';
+import { eventStoreMiddleware } from '@event-driven-io/emmett-hono';
+
+// 1. Assume you have an existing pool instance
+const myExistingPool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+// 2. Create the event store using the existing pool
+// Note: You might pass the connection string or just the pool depending on your needs.
+const myEventStore = getPostgreSQLEventStore(process.env.DATABASE_URL!, {
+  connectionOptions: {
+    pool: myExistingPool,
+    // Set `pooled: true` or `pooled: false` explicitly if needed,
+    // and potentially provide `client` for non-pooled scenarios.
+  },
+});
+
+const app = new Hono();
+
+// 3. Pass a factory function returning your store to the middleware
+app.use(
+  '*',
+  eventStoreMiddleware(() => myEventStore),
+);
+
+// ... your routes ...
+
+// Optional: Ensure graceful shutdown for your pool if managed externally
+// await myExistingPool.end();
+```
+
 ### 5 · Pooling best-practices
 
 - **Keep the pool small** in Node - Neon recommends ≤ 5 connections 📉.
