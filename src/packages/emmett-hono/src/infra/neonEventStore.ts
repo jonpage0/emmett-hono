@@ -32,7 +32,7 @@ export function neonEventStore(
     nodePoolOptions: options?.nodePoolOptions,
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
   return getPostgreSQLEventStore(connectionString, {
     ...(options?.eventStoreOptions ?? {}),
     connectionOptions: { dumbo: db }, // Assert Dumbo type

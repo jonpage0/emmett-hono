@@ -26,23 +26,24 @@ Event Sourcing, keeps all the facts that happened in our system as events. That 
 - Providing clear patterns for common operations,
 - Supporting multiple testing approaches with built-in utilities,
 - Including ready-to-use event store implementations,
-- Offering simple integration with Express.js.
+- Offering simple integration with popular web frameworks (Express, Hono, Fastify).
 
 **Check Emmett and take your event-driven applications back to the future!**
 
 ## Features
 
-| Feature                           | Description                                                                           |
-| --------------------------------- | ------------------------------------------------------------------------------------- |
-| **Event-Centric Modeling**        | Structured approach to modeling business processes through events                     |
-| **Multiple Event Stores**         | Built-in support for PostgreSQL, EventStoreDB, MongoDB, SQLite, and In-Memory storage |
-| **Command Handling Patterns**     | Standardized approach to command processing and event handling                        |
-| **Building read models**          | Built-in projections to build read models from recorded events.                       |
-| **Type Safety**                   | First-class TypeScript support with structural typing                                 |
-| **Express.js Integration**        | Seamless integration with Express.js, including conventional error handling etc.      |
-| **Comprehensive Testing Support** | Tools for unit, integration, and E2E testing with BDD-style syntax                    |
-| **Lightweight Design**            | Focused on composition over replacement, allowing integration with existing systems   |
-| **Docker Testing Integration**    | Support for TestContainers to simplify database setup in tests                        |
+| Feature                           | Description                                                                                    |
+| --------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Event-Centric Modeling**        | Structured approach to modeling business processes through events                              |
+| **Multiple Event Stores**         | Built-in support for PostgreSQL, EventStoreDB, MongoDB, SQLite, and In-Memory storage          |
+| **Command Handling Patterns**     | Standardized approach to command processing and event handling                                 |
+| **Building read models**          | Built-in projections to build read models from recorded events.                                |
+| **Type Safety**                   | First-class TypeScript support with structural typing                                          |
+| **Framework Integration**         | Helpers for Express, Hono, and Fastify: application setup, common middleware, etc.             |
+| **Standardized Response Helpers** | Utilities (in framework packages) for consistent HTTP responses (Problem Details, ETags, etc.) |
+| **Comprehensive Testing Support** | Tools for unit, integration, and E2E testing with BDD-style syntax                             |
+| **Lightweight Design**            | Focused on composition over replacement, allowing integration with existing systems            |
+| **Docker Testing Integration**    | Support for TestContainers to simplify database setup in tests                                 |
 
 ## Documentation and Resources
 
